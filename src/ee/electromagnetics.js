@@ -1,0 +1,6 @@
+export const MU0=4e-7*Math.PI,EPS0=8.8541878128e-12,C0=1/Math.sqrt(MU0*EPS0);
+export function parallelPlateCapacitance({area,distance,er=1}){return EPS0*er*area/distance}
+export function solenoidInductance({turns,area,length,ur=1}){return MU0*ur*turns*turns*area/length}
+export function skinDepth({frequency,conductivity,ur=1}){return Math.sqrt(2/(2*Math.PI*frequency*MU0*ur*conductivity))}
+export function transmissionLine({R=0,L,C,G=0,frequency,length}){const w=2*Math.PI*frequency,a=[R,w*L],b=[G,w*C],mul=(x,y)=>[x[0]*y[0]-x[1]*y[1],x[0]*y[1]+x[1]*y[0]],div=(x,y)=>{const d=y[0]*y[0]+y[1]*y[1];return[(x[0]*y[0]+x[1]*y[1])/d,(x[1]*y[0]-x[0]*y[1])/d]},sqrt=z=>{const r=Math.hypot(...z),t=Math.atan2(z[1],z[0])/2;return[Math.sqrt(r)*Math.cos(t),Math.sqrt(r)*Math.sin(t)]};const gamma=sqrt(mul(a,b)),Z0=sqrt(div(a,b));return{gamma,Z0,alphaNpPerUnit:gamma[0],betaRadPerUnit:gamma[1],attenuationNp:gamma[0]*length,phaseRad:gamma[1]*length,velocity:gamma[1]===0?Infinity:w/gamma[1]}}
+export function poyntingMagnitude({Erms,Hrms,phaseDeg=0}){return Erms*Hrms*Math.cos(phaseDeg*Math.PI/180)}
