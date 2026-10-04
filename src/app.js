@@ -4,6 +4,7 @@ import{loadIEEE39}from'./data/ieee39.js';
 import{ieee39Generators,ieee39Loads,ieee39Fleet}from'./data/ieee39Dynamic.js';
 import{scientificBoundaries,modelLibrary}from'./data/modelLibrary.js';
 import{parseMatpower}from'./io/matpower.js';
+import{projectToMatpower,matpowerToProjectNetwork}from'./io/projectAdapter.js';
 import{solvePowerFlow,validateSolvedCase,powerFlowSummary}from'./engines/powerflow.js';
 import{simulateDynamics,convergenceStudy}from'./engines/dynamics.js';
 import{benchmarkMPC,horizonBenchmark,warmStartBenchmark}from'./validation/solverBenchmarks.js';
@@ -32,9 +33,9 @@ function badge(status){const c=status==='PASS'||status==='CONVERGED'?'good':stat
 function setView(name){$$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));$$('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name))}
 $$('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));$('#advancedToggle').onclick=()=>setView('advanced');
 
-function hydrateNetwork(mpc){const p=project.get();p.network.baseMVA=mpc.baseMVA;p.network.frequencyHz=60;p.network.case=mpc;p.network.buses=mpc.bus.map((b,i)=>({id:String(b[0]),number:b[0],name:'Bus '+b[0],type:b[1]===3?'Slack':b[1]===2?'PV':'PQ',Pd:b[2],Qd:b[3],Vm:b[7],Va:b[8],baseKV:b[9],ui:{x:40+(i%8)*110,y:40+Math.floor(i/8)*92}}));p.network.branches=mpc.branch.map((b,i)=>({id:'BR'+(i+1),from:b[0],to:b[1],r:b[2],x:b[3],b:b[4],rateA:b[5],tap:b[8]||1,shift:b[9]||0,status:b[10]}));p.network.transformers=[];p.devices.generators=ieee39Generators(mpc);p.devices.loads=ieee39Loads(mpc);p.devices.fleet=ieee39Fleet();p.devices.relays=[];p.modified=new Date().toISOString();project.set(p);caseData=mpc;builder?.setProject(project)}
+function hydrateNetwork(mpc){const p=project.get();p.network=matpowerToProjectNetwork(mpc);p.devices.generators=ieee39Generators(mpc);p.devices.loads=ieee39Loads(mpc);p.devices.fleet=ieee39Fleet();p.devices.relays=[];p.modified=new Date().toISOString();project.set(p);caseData=mpc;builder?.setProject(project)}
 async function load39(fullOrder=false){const mpc=await loadIEEE39();hydrateNetwork(mpc);if(fullOrder){const p=project.get();p.devices.generators=ieee39Generators(mpc,{fullOrder:true});project.set(p);builder.setProject(project)}renderAll();$('#networkStatus').textContent='IEEE 39-bus loaded — '+project.get().devices.generators.length+' generators, '+project.get().devices.loads.length+' loads.'}
-function ensureCase(){caseData=project.get().network.case||caseData;if(!caseData)throw new Error('Load or import a network first.');return caseData}
+function ensureCase(){const p=project.get();if(!p.network.buses?.length)throw new Error('Load, import, or build a network first.');caseData=projectToMatpower(p);return caseData}
 
 function renderPipeline(){ $('#pipeline').innerHTML=pipelineSteps.map((x,i)=>'<div class="pipe-step" data-pipe="'+i+'"><b>'+(i+1)+'. '+x+'</b><span class="state">ready</span></div>').join('')}
 function pipelineState(i,state){const el=$('[data-pipe="'+i+'"]');if(!el)return;el.classList.toggle('done',state==='done');el.classList.toggle('running',state==='running');el.querySelector('.state').textContent=state}
