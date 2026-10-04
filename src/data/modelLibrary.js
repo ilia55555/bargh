@@ -38,4 +38,4 @@ export const scientificBoundaries=[
  ['EMT / switching transients','not','Not implemented'],
  ['Vendor-certified protection','not','Not implemented'],
  ['Full nonlinear NMPC','not','MPC is reduced-order/prediction-model based with full-network security checks']
-]};
+];
