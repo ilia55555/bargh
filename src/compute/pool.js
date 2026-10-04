@@ -1,0 +1,5 @@
+export class WorkerPool{
+ constructor(url,size=Math.max(1,Math.min(8,(navigator.hardwareConcurrency||4)-1))){this.url=url;this.size=size}
+ async run(project,cases,{onProgress}={}){if(!cases.length)return[];const chunks=Array.from({length:Math.min(this.size,cases.length)},()=>[]);cases.forEach((c,i)=>chunks[i%chunks.length].push(c));let done=0;const jobs=chunks.map(chunk=>new Promise((resolve,reject)=>{const w=new Worker(this.url,{type:'module'});w.onmessage=e=>{if(e.data.type==='progress'){done+=5;onProgress?.(Math.min(cases.length,done),cases.length)}else if(e.data.type==='done'){w.terminate();resolve(e.data.results)}else if(e.data.type==='error'){w.terminate();reject(new Error(e.data.message))}};w.onerror=e=>{w.terminate();reject(e.error||new Error(e.message))};w.postMessage({project,cases:chunk})}));return(await Promise.all(jobs)).flat()}
+}
+export function cpuBackendInfo(){return{name:'Web Workers CPU',workers:Math.max(1,Math.min(8,(navigator.hardwareConcurrency||4)-1)),hardwareConcurrency:navigator.hardwareConcurrency||null}}
