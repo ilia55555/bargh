@@ -9,7 +9,7 @@ function buildCondensed(A,B,C,D,N,x0,dist,Ed){const nx=A.length,nu=B[0].length,n
  let xd=Array(nx).fill(0);for(let j=0;j<=k;j++){const Ap=matrixPower(A,k-j),inc=matVec(Ap,Ed).map(v=>v*dist);xd=addVec(xd,inc)}const gy=matVec(C,xd);for(let y=0;y<ny;y++)g[k*ny+y]=gy[y]}return{M,S,g}}
 function blockDiagWeights(N,weights){const ny=weights.length,Q=zeros(N*ny,N*ny);for(let k=0;k<N;k++)for(let y=0;y<ny;y++)Q[k*ny+y][k*ny+y]=weights[y];return Q}
 function deltaMatrix(N,nu){const D=zeros(N*nu,N*nu);for(let k=0;k<N;k++)for(let u=0;u<nu;u++){const i=k*nu+u;D[i][i]=1;if(k>0)D[i][(k-1)*nu+u]=-1}return D}
-function quadBuild(S,Q,R,Dd,Rd,baseY,prev){const ST=transpose(S),H=madd(madd(matMul(matMul(ST,Q),S),R),matMul(matMul(transpose(Dd),Rd),Dd)),f=matVec(matMul(ST,Q),baseY);const dprev=Array(prev.length).fill(0);for(let u=0;u<prev.length;u++)dprev[u]=-prev[u];const bias=matVec(matMul(transpose(Dd),Rd),dprev);return{H:mscale(H,2),f:addVec(mscaleVec(f,2),mscaleVec(bias,2))}}
+function quadBuild(S,Q,R,Dd,Rd,baseY,prev){const ST=transpose(S),H=madd(madd(matMul(matMul(ST,Q),S),R),matMul(matMul(transpose(Dd),Rd),Dd)),f=matVec(matMul(ST,Q),baseY);const dprev=Array(Dd.length).fill(0);for(let u=0;u<prev.length&&u<dprev.length;u++)dprev[u]=-prev[u];const bias=matVec(matMul(transpose(Dd),Rd),dprev);return{H:mscale(H,2),f:addVec(mscaleVec(f,2),mscaleVec(bias,2))}}
 const mscaleVec=(v,s)=>v.map(x=>x*s);
 function objective(H,f,x){return .5*dot(x,matVec(H,x))+dot(f,x)}
 export class ProjectedQPSolver{
