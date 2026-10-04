@@ -1,0 +1,16 @@
+name: GridMPC CI
+on:
+  push:
+    branches: [Ilia]
+  workflow_dispatch:
+jobs:
+  numerical-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check
+      - run: npm test
