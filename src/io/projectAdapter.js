@@ -10,7 +10,7 @@ export function projectToMatpower(project){
  if(!gen.length)throw new Error('Project needs at least one in-service generator');
  const makeBranch=(e,isTransformer=false)=>{const f=busNum(e.from),t=busNum(e.to);if(!Number.isFinite(f)||!Number.isFinite(t))throw new Error('Branch references missing bus');return[f,t,n(e.r,.001),n(e.x,.01),n(e.b),n(e.rateA),n(e.rateB,e.rateA),n(e.rateC,e.rateA),isTransformer?n(e.tap,1):n(e.tap,0),n(e.shift),e.status===0?0:1,n(e.angmin,-360),n(e.angmax,360)]};
  const branch=[...(project.network.branches||[]).map(e=>makeBranch(e,false)),...(project.network.transformers||[]).map(e=>makeBranch(e,true))];
- return{version:'2',baseMVA:n(project.network.baseMVA,100),bus,gen,branch,gencost:project.network.case?.gencost||[],source:'GridMPC Project Adapter'}
+ return{version:'2',baseMVA:n(project.network.baseMVA,100),bus,gen,branch,gencost:project.network.case?.gencost||[],source:'GridMPC Project Adapter',gridmpc:{busMap:Object.fromEntries(idToNum),reverseBusMap:Object.fromEntries([...idToNum].map(([k,v])=>[v,k]))}}
 }
 export function matpowerToProjectNetwork(mpc){
  return{
