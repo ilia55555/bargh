@@ -1,0 +1,3 @@
+export function rk4Step(f,t,x,h,ctx){const k1=f(t,x,ctx),x2=x.map((v,i)=>v+h*k1[i]/2),k2=f(t+h/2,x2,ctx),x3=x.map((v,i)=>v+h*k2[i]/2),k3=f(t+h/2,x3,ctx),x4=x.map((v,i)=>v+h*k3[i]),k4=f(t+h,x4,ctx);return x.map((v,i)=>v+h*(k1[i]+2*k2[i]+2*k3[i]+k4[i])/6)}
+export function heunStep(f,t,x,h,ctx){const k1=f(t,x,ctx),xp=x.map((v,i)=>v+h*k1[i]),k2=f(t+h,xp,ctx);return x.map((v,i)=>v+h*(k1[i]+k2[i])/2)}
+export function integrateFixed(f,x0,{t0=0,t1,dt,method='rk4',ctx,onStep}){let x=x0.slice(),t=t0;const step=method==='heun'?heunStep:rk4Step;let n=0;while(t<t1-1e-12){const h=Math.min(dt,t1-t);x=step(f,t,x,h,ctx);t+=h;n++;onStep?.(t,x,n)}return x}

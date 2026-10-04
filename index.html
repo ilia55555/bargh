@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="GridMPC Research IDE v12 — offline-first power-system research environment">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles/app.css">
+  <title>GridMPC Research IDE</title>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">G</span><div><strong>GridMPC</strong><small>Research IDE v12</small></div></div>
+      <div class="project-strip">
+        <span id="projectName">IEEE 39 Research Project</span>
+        <span id="projectDirty" class="dot" title="Project state"></span>
+      </div>
+      <div class="top-actions">
+        <button id="newProject" class="btn ghost">New</button>
+        <label class="btn ghost">Open<input id="openProject" type="file" accept=".json,.gridmpc" hidden></label>
+        <button id="saveProject" class="btn primary">Save</button>
+      </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Research workflow">
+      <nav id="workflowNav">
+        <button data-view="project" class="nav-item active"><span>1</span><b>Project</b><small>one source of truth</small></button>
+        <button data-view="model" class="nav-item"><span>2</span><b>Model</b><small>network & devices</small></button>
+        <button data-view="controls" class="nav-item"><span>3</span><b>Controls</b><small>MPC & regulators</small></button>
+        <button data-view="experiments" class="nav-item"><span>4</span><b>Experiments</b><small>run, stress, sweep</small></button>
+        <button data-view="validation" class="nav-item"><span>5</span><b>Validation</b><small>cross-tool & calibration</small></button>
+        <button data-view="publication" class="nav-item"><span>6</span><b>Publication</b><small>figures & report</small></button>
+      </nav>
+      <button id="advancedToggle" class="nav-item advanced"><span>⚙</span><b>Advanced</b><small>inspectors & legacy labs</small></button>
+    </aside>
+
+    <main class="workspace">
+      <section id="view-project" class="view active">
+        <div class="page-head"><div><h1>Research Project</h1><p>One model, one set of assumptions, every study.</p></div><span id="scopeBadge" class="badge">RMS / electromechanical</span></div>
+        <div class="grid cards-3">
+          <article class="card hero">
+            <h2>One-click Research Pipeline</h2>
+            <div id="pipeline" class="pipeline"></div>
+            <button id="runPipeline" class="btn primary wide">Run pipeline</button>
+            <div id="pipelineStatus" class="status">Ready.</div>
+          </article>
+          <article class="card"><h2>Project health</h2><div id="projectHealth" class="metric-list"></div></article>
+          <article class="card"><h2>Recent runs</h2><div id="recentRuns" class="run-list empty">No runs yet.</div></article>
+        </div>
+        <div class="grid cards-2">
+          <article class="card"><h2>Scientific scope</h2><div id="scientificScope" class="scope-list"></div></article>
+          <article class="card"><h2>Quick start</h2>
+            <div class="quick-actions">
+              <button id="loadIeee39" class="btn">Load IEEE 39-bus</button>
+              <button id="loadRaminStudy" class="btn">Ramin MPC study preset</button>
+              <button id="loadMicrogridStudy" class="btn">Microgrid MOGA preset</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-model" class="view">
+        <div class="page-head"><div><h1>Model Studio</h1><p>Build the network visually or import a published case.</p></div><div class="toolbar"><button id="importCaseBtn" class="btn">Import</button><button id="runPowerFlow" class="btn primary">Solve AC PF</button></div></div>
+        <div class="model-layout">
+          <aside class="palette" id="modelPalette"></aside>
+          <div class="canvas-card">
+            <div id="networkCanvas" class="network-canvas" tabindex="0" aria-label="Network builder canvas"></div>
+            <div id="networkStatus" class="status">No model loaded.</div>
+          </div>
+          <aside class="inspector" id="modelInspector"><h3>Inspector</h3><p class="muted">Select an element.</p></aside>
+        </div>
+        <input id="caseImport" type="file" accept=".m,.csv,.json,.raw,.txt" hidden>
+      </section>
+
+      <section id="view-controls" class="view">
+        <div class="page-head"><div><h1>Controls</h1><p>Machine controls, inverter controls and coordinated MPC.</p></div><button id="runControlAB" class="btn primary">Run A/B</button></div>
+        <div id="controlCards" class="grid cards-3"></div>
+        <div class="grid cards-2"><article class="card"><h2>MPC solver audit</h2><div id="mpcAudit"></div></article><article class="card"><h2>Resource fleet</h2><div id="fleetEditor"></div></article></div>
+      </section>
+
+      <section id="view-experiments" class="view">
+        <div class="page-head"><div><h1>Experiments</h1><p>Design once. Run deterministic, stochastic and sensitivity studies.</p></div><button id="newExperiment" class="btn primary">New experiment</button></div>
+        <div class="grid cards-3">
+          <article class="card"><h2>Automatic designer</h2><textarea id="experimentGoal" placeholder="Example: improve frequency nadir with EVs while minimizing battery throughput"></textarea><button id="designExperiment" class="btn wide">Design study</button><div id="designOutput" class="status"></div></article>
+          <article class="card"><h2>Monte Carlo</h2><div id="mcPanel"></div></article>
+          <article class="card"><h2>Performance</h2><div id="performancePanel"></div></article>
+        </div>
+        <div class="grid cards-2"><article class="card"><h2>Sensitivity ranking</h2><div id="sensitivityPanel"></div></article><article class="card"><h2>Parameter sweep / Pareto</h2><div id="sweepPanel"></div></article></div>
+        <article class="card"><h2>Experiment library</h2><div id="experimentLibrary"></div></article>
+      </section>
+
+      <section id="view-validation" class="view">
+        <div class="page-head"><div><h1>Validation & Calibration</h1><p>Measure agreement against independent tools or data.</p></div><div class="toolbar"><label class="btn">Reference<input id="referenceImport" type="file" accept=".csv,.txt,.json" hidden></label><button id="runCalibration" class="btn primary">Auto calibrate</button></div></div>
+        <div id="validationBanner" class="banner warn">Internal validation only — no external reference loaded.</div>
+        <div class="grid cards-2"><article class="card"><h2>Cross-tool metrics</h2><div id="validationMetrics"></div></article><article class="card"><h2>Calibration</h2><div id="calibrationPanel"></div></article></div>
+        <article class="card"><h2>Regression history</h2><div id="regressionPanel"></div></article>
+      </section>
+
+      <section id="view-publication" class="view">
+        <div class="page-head"><div><h1>Publication</h1><p>Reproducible figures, tables and reports.</p></div><button id="buildReport" class="btn primary">Build report</button></div>
+        <div class="grid cards-3"><article class="card"><h2>Figures</h2><div id="figurePanel"></div></article><article class="card"><h2>IEEE tables</h2><div id="tablePanel"></div></article><article class="card"><h2>Reproducibility</h2><div id="reproPanel"></div></article></div>
+      </section>
+
+      <section id="view-advanced" class="view">
+        <div class="page-head"><div><h1>Advanced</h1><p>Direct access to numerical engines and diagnostics.</p></div></div>
+        <div id="advancedLabs" class="grid cards-2"></div>
+      </section>
+    </main>
+  </div>
+  <input id="hiddenDownload" hidden>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
