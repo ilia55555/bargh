@@ -1,0 +1,8 @@
+import{clamp}from'../math/linalg.js';
+export function initInverter(inv){return{p:0,q:0,omega:1,theta:0,soc:inv.soc0??.7}}
+export function inverterDerivative(inv,s,meas,cmd,dt){const type=inv.model||'GridFollowing',pmax=Math.abs(inv.pmax||1),qmax=Math.abs(inv.qmax||pmax),pCmd=clamp(cmd.p??0,-pmax,pmax),qCmd=clamp(cmd.q??0,-qmax,qmax);if(type==='GridFollowing')return{p:(pCmd-s.p)/Math.max(inv.Tp||.05,.005),q:(qCmd-s.q)/Math.max(inv.Tq||.05,.005),omega:0,theta:0,soc:socDot(inv,s,pCmd)};
+ if(type==='DroopGFM'){const dw=(inv.kp||.05)*(pCmd-(meas.p||0)),w=1+dw;return{p:(pCmd-s.p)/Math.max(inv.Tp||.03,.005),q:(qCmd-s.q)/Math.max(inv.Tq||.03,.005),omega:(w-s.omega)/Math.max(inv.Tw||.02,.005),theta:2*Math.PI*(inv.f0||60)*(s.omega-1),soc:socDot(inv,s,pCmd)}}
+ if(type==='VSG'){const H=Math.max(inv.Hv||2,.01),D=inv.Dv||1,dw=(pCmd-(meas.p||0)-D*(s.omega-1))/(2*H);return{p:(pCmd-s.p)/Math.max(inv.Tp||.03,.005),q:(qCmd-s.q)/Math.max(inv.Tq||.03,.005),omega:dw,theta:2*Math.PI*(inv.f0||60)*(s.omega-1),soc:socDot(inv,s,pCmd)}}
+ return{p:(pCmd-s.p)/.05,q:(qCmd-s.q)/.05,omega:0,theta:0,soc:socDot(inv,s,pCmd)}}
+function socDot(inv,s,p){if(!inv.energyMWh)return 0;const eta=inv.eta??.95,pe=p>=0?p/eta:p*eta;return-pe/Math.max(inv.energyMWh,.001)/3600}
+export function enforceInverterEnergy(inv,s,p){if(!inv.energyMWh)return p;const lo=inv.socMin??.1,hi=inv.socMax??.95;if(p>0&&s.soc<=lo+1e-6)return 0;if(p<0&&s.soc>=hi-1e-6)return 0;return p}

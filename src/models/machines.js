@@ -1,0 +1,18 @@
+import{clamp,cabs,cdiv,cmul,csub,cadd,cexp,cconj}from'../math/linalg.js';
+const WB=2*Math.PI*60;
+function dqFromComplex(z,delta){const rot=cexp(-delta),q=cmul(z,rot);return{q:q[0],d:-q[1]}}
+function complexFromDQ(d,q,delta){return cmul([q,-d],cexp(delta))}
+function solveStator(V,state,p){const vdq=dqFromComplex(V,state.delta),vd=vdq.d,vq=vdq.q,ed=state.edpp??0,eq=state.eqpp??state.E??1,ra=p.ra||0,xd=p.xdpp??p.xdp,xq=p.xqpp??p.xdp;const a=ra,b=-xq,c=xd,d=ra,r1=ed-vd,r2=eq-vq,det=a*d-b*c;if(Math.abs(det)<1e-10){const z=[ra,xd];const E=complexFromDQ(ed,eq,state.delta),I=cdiv(csub(E,V),z);const idq=dqFromComplex(I,state.delta);return{I,Id:idq.d,Iq:idq.q}}const Id=(r1*d-b*r2)/det,Iq=(a*r2-c*r1)/det,I=complexFromDQ(Id,Iq,state.delta);return{I,Id,Iq}}
+export function initClassical({V,S,p}){const I=cconj(cdiv(S,V)),E=cadd(V,cmul([p.ra||0,p.xdp],I));return{delta:Math.atan2(E[1],E[0]),omega:1,E:cabs(E),Pm:S[0],Efd:cabs(E)}}
+export function initGENROU({V,S,p}){const I=cconj(cdiv(S,V)),z=[p.ra||0,p.xdpp],Epp=cadd(V,cmul(z,I)),delta=Math.atan2(Epp[1],Epp[0]),idq=dqFromComplex(I,delta),edq=dqFromComplex(Epp,delta),Id=idq.d,Iq=idq.q,eqpp=edq.q,edpp=edq.d,eqp=eqpp+(p.xdp-p.xdpp)*Id,edp=edpp-(p.xqp-p.xqpp)*Iq,Efd=eqp+(p.xd-p.xdp)*Id;return{delta,omega:1,eqp,edp,eqpp,edpp,Pm:S[0],Efd}}
+export function initGENSAL({V,S,p}){const I=cconj(cdiv(S,V)),z=[p.ra||0,p.xdpp],Epp=cadd(V,cmul(z,I)),delta=Math.atan2(Epp[1],Epp[0]),idq=dqFromComplex(I,delta),edq=dqFromComplex(Epp,delta),Id=idq.d,eqpp=edq.q,edpp=edq.d,eqp=eqpp+(p.xdp-p.xdpp)*Id,Efd=eqp+(p.xd-p.xdp)*Id;return{delta,omega:1,eqp,eqpp,edpp,Pm:S[0],Efd}}
+export function machineNorton(type,state,p){if(type==='Classical'){const E=cmul([state.E,0],cexp(state.delta)),z=[p.ra||0,p.xdp];return{Y:cdiv([1,0],z),I:cdiv(E,z)}}const E=complexFromDQ(state.edpp||0,state.eqpp||state.E||1,state.delta),x=.5*((p.xdpp??p.xdp)+(p.xqpp??p.xdp)),z=[p.ra||0,x];return{Y:cdiv([1,0],z),I:cdiv(E,z)}}
+export function machineElectrical(type,state,V,p){if(type==='Classical'){const E=cmul([state.E,0],cexp(state.delta)),I=cdiv(csub(E,V),[p.ra||0,p.xdp]),S=cmul(V,cconj(I));return{...solveStator(V,{...state,edpp:0,eqpp:state.E},{...p,xdpp:p.xdp,xqpp:p.xdp}),Pe:S[0],Qe:S[1]}}const out=solveStator(V,state,p),S=cmul(V,cconj(out.I));return{...out,Pe:S[0],Qe:S[1]}}
+export function machineDerivatives(type,state,elec,p,inputs={}){const H=Math.max(1e-4,p.H),D=p.D||0,Pm=inputs.Pm??state.Pm,Efd=inputs.Efd??state.Efd??1,domega=(Pm-elec.Pe-D*(state.omega-1))/(2*H),ddelta=(p.wb||WB)*(state.omega-1);
+ if(type==='Classical')return{delta:ddelta,omega:domega};
+ const Id=elec.Id,Iq=elec.Iq;
+ if(type==='GENROU')return{delta:ddelta,omega:domega,eqp:(Efd-state.eqp-(p.xd-p.xdp)*Id)/p.Td0p,edp:(-state.edp+(p.xq-p.xqp)*Iq)/p.Tq0p,eqpp:(state.eqp-state.eqpp-(p.xdp-p.xdpp)*Id)/p.Td0pp,edpp:(state.edp-state.edpp+(p.xqp-p.xqpp)*Iq)/p.Tq0pp};
+ if(type==='GENSAL')return{delta:ddelta,omega:domega,eqp:(Efd-state.eqp-(p.xd-p.xdp)*Id)/p.Td0p,eqpp:(state.eqp-state.eqpp-(p.xdp-p.xdpp)*Id)/p.Td0pp,edpp:(-state.edpp+(p.xq-p.xqpp)*Iq)/p.Tq0pp};
+ throw new Error('Unknown machine '+type)}
+export function stepMachineState(state,d,h,type,p){const n={...state};for(const[k,v]of Object.entries(d))n[k]=(n[k]??0)+h*v;if(type!=='Classical'){n.eqpp=clamp(n.eqpp??1,-5,5);n.edpp=clamp(n.edpp??0,-5,5)}return n}
+export function machineStateVector(type,s){return type==='Classical'?[s.delta,s.omega]:type==='GENROU'?[s.delta,s.omega,s.eqp,s.edp,s.eqpp,s.edpp]:[s.delta,s.omega,s.eqp,s.eqpp,s.edpp]}
