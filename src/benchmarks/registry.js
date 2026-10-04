@@ -1,0 +1,12 @@
+import{sha256}from'../core/hash.js';
+export const V10_STRESS_BASELINE={version:'10.0',nadir:59.93414,peakRoCoF:.23564,finalFrequency:59.99649,minVoltage:.96298,maxBranchLoading:105.85,solverConvergedPct:100,fleetCapOvershoot:0,note:'Recorded from v10 canonical 20-resource regression case; runtime excluded because environment-dependent.'};
+export function stressFleet20(){const buses=[4,8,15,16,20,21,23,24,25,27,3,7,18,28,12,14,26,29,1,9],shares=[6,7,5,6,4,5,5,6,6,7,6,5,4,5,4,4,4,3,5,3],types=['BatteryInverter','BatteryInverter','BatteryInverter','BatteryInverter','BatteryInverter','BatteryInverter','BatteryInverter','BatteryInverter','EV/V2G','EV/V2G','EV/V2G','EV/V2G','EV/V2G','EV/V2G','DER','DER','DER','DER','GridIntertie','GridIntertie'];return buses.map((bus,i)=>{const storage=types[i]==='BatteryInverter'||types[i].includes('EV'),pmax=35+(i%6)*8+(types[i]==='GridIntertie'?40:0),connect=i===9?2:i===17?4:0,disconnect=i===12?9:999;return{id:'Stress20-'+(i+1),name:'Stress20 '+(i+1),type:types[i],model:'GridFollowing',bus,pmax,rampMWs:storage?700+(i%5)*130:450+(i%4)*90,energyMWh:storage?5+(i%7)*1.4:0,soc0:storage?(62+(i%5)*4)/100:1,socMin:storage?(22+(i%3)*2)/100:0,socMax:.95,participation:shares[i]/100,connect,disconnect,enabled:true}})}
+export function benchmarkRegistry(){return[
+ {id:'generator-trip-38',name:'Generator Trip — Bus 38',scenario:{type:'trip',bus:38,start:1},modifiers:{}},
+ {id:'fault-bus16',name:'3-phase self-clearing fault — Bus 16',scenario:{type:'fault',bus:16,start:1,clear:1.12},modifiers:{}},
+ {id:'load-step-8pct',name:'Load Step +8%',scenario:{type:'loadStep',start:1,fraction:.08},modifiers:{}},
+ {id:'low-inertia-trip',name:'Low-inertia Generator Trip',scenario:{type:'trip',bus:38,start:1},modifiers:{inertiaScale:.5}},
+ {id:'stress20',name:'20-resource coordinated MPC stress',scenario:{type:'trip',bus:38,start:1},modifiers:{stressFleet:true}}
+]}
+export async function benchmarkFingerprint(project,b){return sha256({appVersion:project.appVersion,benchmark:b,network:project.network.case||project.network,devices:project.devices,controls:project.controls,simulation:project.simulation})}
+export function applyBenchmark(project,b){const p=structuredClone(project);if(b.modifiers.inertiaScale)for(const g of p.devices.generators)g.params.H*=b.modifiers.inertiaScale;if(b.modifiers.stressFleet)p.devices.fleet=stressFleet20();return p}
