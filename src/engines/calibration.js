@@ -1,0 +1,10 @@
+import{alignReference}from'../validation/importers.js';import{basicMetrics}from'../validation/metrics.js';
+function rng(seed=1){let x=seed>>>0;return()=>((x=(1664525*x+1013904223)>>>0)/4294967296)}
+function getPath(o,path){return path.split('.').reduce((a,k)=>a?.[k],o)}
+function setPath(o,path,v){const p=path.split('.'),last=p.pop();let q=o;for(const k of p){if(!(k in q))q[k]={};q=q[k]}q[last]=v}
+function vectorToProject(base,defs,x){const p=structuredClone(base);defs.forEach((d,i)=>setPath(p,d.path,x[i]));return p}
+export async function differentialEvolutionCalibration({project,reference,simulate,parameters,population=14,generations=12,seed=project.seed||1,onProgress}){if(!parameters?.length)throw new Error('No calibration parameters');const R=rng(seed),dim=parameters.length,clip=(x,d)=>Math.max(d.min,Math.min(d.max,x)),random=()=>parameters.map(d=>d.min+R()*(d.max-d.min));let pop=Array.from({length:population},random),evals=0;
+ const score=async x=>{const p=vectorToProject(project,parameters,x),run=await simulate(p),aligned=alignReference(reference,run.rows,{method:'linear'}),ref=aligned.frequency;if(!ref)return Infinity;const m=basicMetrics(run.rows.map(r=>r.frequency),ref);evals++;return m?.rmse??Infinity};
+ let fit=[];for(const x of pop)fit.push(await score(x));const before=Math.min(...fit);
+ for(let g=0;g<generations;g++){for(let i=0;i<population;i++){let a,b,c;do a=Math.floor(R()*population);while(a===i);do b=Math.floor(R()*population);while(b===i||b===a);do c=Math.floor(R()*population);while(c===i||c===a||c===b);const F=.5+.3*R(),CR=.7+.2*R(),jr=Math.floor(R()*dim),trial=pop[i].map((v,j)=>R()<CR||j===jr?clip(pop[a][j]+F*(pop[b][j]-pop[c][j]),parameters[j]):v),ft=await score(trial);if(ft<fit[i]){pop[i]=trial;fit[i]=ft}}onProgress?.((g+1)/generations,{generation:g+1,best:Math.min(...fit),evaluations:evals})}
+ const bi=fit.indexOf(Math.min(...fit)),best=pop[bi],calibrated=vectorToProject(project,parameters,best),changes=parameters.map((d,i)=>({path:d.path,before:getPath(project,d.path),after:best[i]}));return{calibrated,beforeRmse:before,afterRmse:fit[bi],changes,evaluations:evals,method:'Differential Evolution',seed}}
