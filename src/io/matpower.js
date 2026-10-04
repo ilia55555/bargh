@@ -1,0 +1,6 @@
+function stripComments(s){return s.replace(/%.*$/gm,'')}
+function parseMatrix(src,name){const re=new RegExp('mpc\\.'+name+'\\s*=\\s*\\[([\\s\\S]*?)\\];','m'),m=stripComments(src).match(re);if(!m)throw new Error('MATPOWER matrix '+name+' not found');return m[1].split(/;|\n/).map(r=>r.trim()).filter(Boolean).map(r=>r.split(/[\s,]+/).filter(Boolean).map(Number)).filter(r=>r.length)}
+function scalar(src,name,fallback){const re=new RegExp('mpc\\.'+name+'\\s*=\\s*([0-9.eE+-]+)\\s*;'),m=stripComments(src).match(re);return m?Number(m[1]):fallback}
+export function parseMatpower(text){return{version:(text.match(/mpc\.version\s*=\s*'([^']+)'/)||[])[1]||'2',baseMVA:scalar(text,'baseMVA',100),bus:parseMatrix(text,'bus'),gen:parseMatrix(text,'gen'),branch:parseMatrix(text,'branch'),gencost:(()=>{try{return parseMatrix(text,'gencost')}catch{return[]}})(),source:'MATPOWER text import'}}
+export async function loadMatpowerUrl(url){const r=await fetch(url);if(!r.ok)throw new Error('Failed to load MATPOWER case');return parseMatpower(await r.text())}
+export function exportMatpowerJson(mpc){return JSON.stringify(mpc,null,2)}
