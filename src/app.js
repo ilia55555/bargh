@@ -23,6 +23,7 @@ import{reproducibilityRecord,buildHtmlReport,downloadText,ieeeTable}from'./publi
 import{benchmarkRegistry,applyBenchmark,benchmarkFingerprint,V10_STRESS_BASELINE}from'./benchmarks/registry.js';
 import{addRun,cloneRunAsExperiment}from'./core/runs.js';
 import{renderEngineeringToolbox}from'./ui/engineeringToolbox.js';
+import{CommandPalette}from'./ui/commandPalette.js';
 
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const project=new Store(newProject('IEEE 39 Research Project'));
@@ -98,5 +99,22 @@ $('#runCalibration').onclick=async()=>{if(!reference||!lastRun)return alert('Loa
 $('#buildReport').onclick=async()=>{if(!lastRun)return alert('Run a study first.');const repro=await reproducibilityRecord(project.get(),{run:lastRun,validation,referenceSource:reference?.source}),html=await buildHtmlReport(project.get(),{run:lastRun,validation,reproducibility:repro});downloadText('gridmpc-publication-report-v12.html',html,'text/html')};
 
 project.subscribe(()=>{const p=project.get();$('#projectName').textContent=p.name;$('#projectDirty').style.background=project.dirty?'#ffbd5c':'#44d39e'});
-renderPipeline();renderAll();webGpuInfo().then(info=>{const el=$('#perfStatus');if(el)el.textContent='CPU '+JSON.stringify(cpuBackendInfo())+' · WebGPU '+(info.available?'available (not used for core DAE)':'unavailable')});
+renderPipeline();renderAll();
+new CommandPalette([
+ {id:'go-project',name:'Project',group:'Navigate',keywords:'home project',run:()=>setView('project')},
+ {id:'go-model',name:'Model Studio',group:'Navigate',keywords:'network builder buses lines',run:()=>setView('model')},
+ {id:'go-controls',name:'Controls & MPC',group:'Navigate',keywords:'governor avr pss agc mpc',run:()=>setView('controls')},
+ {id:'go-experiments',name:'Experiments',group:'Navigate',keywords:'monte carlo sensitivity sweep',run:()=>setView('experiments')},
+ {id:'go-validation',name:'Validation & Calibration',group:'Navigate',keywords:'matlab simulink powerfactory psse reference',run:()=>setView('validation')},
+ {id:'go-publication',name:'Publication',group:'Navigate',keywords:'figure report ieee export',run:()=>setView('publication')},
+ {id:'go-advanced',name:'Advanced / Engineering Toolbox',group:'Navigate',keywords:'circuits fault fft machines electronics',run:()=>setView('advanced')},
+ {id:'load-ieee39',name:'Load IEEE 39-bus',group:'Model',keywords:'new england benchmark',run:()=>load39(false)},
+ {id:'run-pf',name:'Run AC Power Flow',group:'Run',keywords:'newton raphson',run:()=>runPF()},
+ {id:'run-dyn',name:'Run Generator Trip Dynamics',group:'Run',keywords:'frequency transient mpc',run:()=>runDefaultDynamics()},
+ {id:'run-pipeline',name:'Run Full Research Pipeline',group:'Run',keywords:'validate stress monte carlo report',run:()=>runPipeline()},
+ {id:'run-contingency',name:'Run N-1 Contingency Screening',group:'Advanced',keywords:'security outage branch generator',run:()=>{setView('advanced');setTimeout(()=>runLab('contingency'),0)}},
+ {id:'run-stateest',name:'Run AC WLS State Estimation',group:'Advanced',keywords:'measurement estimation wls',run:()=>{setView('advanced');setTimeout(()=>runLab('stateest'),0)}},
+ {id:'run-regression',name:'Run Fixed Regression Suite',group:'Audit',keywords:'benchmark hash regression',run:()=>{setView('advanced');setTimeout(()=>runLab('regression'),0)}}
+]);
+webGpuInfo().then(info=>{const el=$('#perfStatus');if(el)el.textContent='CPU '+JSON.stringify(cpuBackendInfo())+' · WebGPU '+(info.available?'available (not used for core DAE)':'unavailable')});
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
