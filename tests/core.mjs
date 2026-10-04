@@ -1,0 +1,12 @@
+import fs from'node:fs/promises';import assert from'node:assert/strict';
+import{parseMatpower}from'../src/io/matpower.js';import{solvePowerFlow,validateSolvedCase}from'../src/engines/powerflow.js';
+import{newProject}from'../src/core/project.js';import{ieee39Generators,ieee39Loads,ieee39Fleet}from'../src/data/ieee39Dynamic.js';
+import{CoordinatedMPC}from'../src/engines/mpc.js';import{compareSignal}from'../src/validation/metrics.js';import{nsga2}from'../src/engines/nsga2.js';import{simulateDynamics}from'../src/engines/dynamics.js';
+const text=await fs.readFile(new URL('../public/cases/case39.m',import.meta.url),'utf8'),mpc=parseMatpower(text);
+const pf=solvePowerFlow(mpc,{tolerance:1e-10,maxIterations:40,flatStart:true});assert.equal(pf.converged,true);assert.ok(pf.maxMismatch<1e-8);const v=validateSolvedCase(mpc,pf);assert.ok(v.vm<1e-5,'Vm '+v.vm);assert.ok(v.va<1e-3,'Va '+v.va);
+const p=newProject('CI');p.network.baseMVA=mpc.baseMVA;p.network.frequencyHz=60;p.network.case=mpc;p.devices.generators=ieee39Generators(mpc);p.devices.loads=ieee39Loads(mpc);p.devices.fleet=ieee39Fleet();p.simulation.dt=.02;p.simulation.endTime=1.4;p.controls.mpc={...p.controls.mpc,mode:'coordinated',horizon:5,maxIterations:200,adaptiveMax:400,fleetCapMW:300,genCapMW:500,wFrequency:100,wRoCoF:30,wControl:.002,wDeltaU:.02};
+const ctl=new CoordinatedMPC(p),q=ctl.solve({dfHz:-.1,genMW:0,fleetMW:0,disturbanceMW:300,soc0:.7,time:1});assert.ok(['CONVERGED','MAX_ITER'].includes(q.status));assert.ok(Number.isFinite(q.kkt));assert.ok(q.command.fleetMW<=300+1e-9);
+const m=compareSignal('frequency',[0,1,2],[60,59.8,60],[60,59.81,60],{f0:60});assert.ok(m.rmse<.01);assert.ok(m.correlation>.999);
+const z=await nsga2({dimension:4,bounds:Array(4).fill([0,1]),population:16,generations:8,seed:7,evaluate:async x=>({obj:[x[0],(1-x[0])**2+x.slice(1).reduce((s,v)=>s+v,0)],violation:0})});assert.ok(z.pareto.length>0);
+const dyn=await simulateDynamics(p,mpc,{scenario:{type:'trip',bus:38,start:1},endTime:1.2,dt:.02});assert.ok(dyn.rows.length>10);assert.ok(Number.isFinite(dyn.metrics.nadir));
+console.log(JSON.stringify({powerFlow:{iterations:pf.iterations,mismatch:pf.maxMismatch,vmError:v.vm,vaError:v.va},mpc:{status:q.status,kkt:q.kkt,residual:q.residual},dynamics:dyn.metrics,pareto:z.pareto.length},null,2));
