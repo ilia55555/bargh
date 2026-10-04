@@ -1,5 +1,5 @@
 import{clamp}from'../math/linalg.js';
-export function zipPower(load,Vmag,frequency=60,f0=60){const z=load.zip||{zP:.2,iP:.3,pP:.5,zQ:.2,iQ:.3,pQ:.5},v=Math.max(.05,Vmag),df=(frequency-f0)/f0,kp=1+(load.Kpf||0)*df,kq=1+(load.Kqf||0)*df,P=load.P0*(z.zP*v*v+z.iP*v+z.pP)*kp,Q=load.Q0*(z.zQ*v*v+z.iQ*v+z.pQ)*kq;return{P,Q}}
+export function zipPower(load,Vmag,frequency=60,f0=60){const z=load.zip||{zP:.2,iP:.3,pP:.5,zQ:.2,iQ:.3,pQ:.5},v=Math.max(.05,Vmag),v0=Math.max(.05,load.V0??1),vr=v/v0,df=(frequency-f0)/f0,kp=1+(load.Kpf||0)*df,kq=1+(load.Kqf||0)*df,P=load.P0*(z.zP*vr*vr+z.iP*vr+z.pP)*kp,Q=load.Q0*(z.zQ*vr*vr+z.iQ*vr+z.pQ)*kq;return{P,Q}}
 export function initMotor(load){return{slip:load.slip0??.02}}
 export function motorPower(load,state,Vmag,frequency=60,f0=60){const v=Math.max(.2,Vmag),s=clamp(state.slip,.001,.4),kv=(load.motorVoltageExp??2),ks=1+(load.motorSlipGain??2)*(s-(load.slip0??.02)),P=load.motorFraction*load.P0*Math.pow(v,kv)*ks,Q=load.motorFraction*load.Q0*Math.pow(v,kv)*ks;return{P,Q}}
 export function motorDerivative(load,state,Vmag,frequency=60,f0=60){const target=clamp((load.slip0??.02)+(load.motorFreqGain??.5)*(f0-frequency)/f0+(load.motorVoltGain??.3)*(1-Vmag),.001,.4);return{slip:(target-state.slip)/Math.max(load.motorT??.5,.01)}}
