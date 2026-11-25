@@ -227,8 +227,9 @@ export function qpSolve({ H, c, Aeq = [], beq = [], G = [], h = [] }, { tol = 1e
     for (let i = 0; i < mi; i++) { let v = s[i] - h[i]; for (let j = 0; j < n; j++) { v += G[i][j] * x[j]; rd[j] += G[i][j] * z[i]; } ri[i] = v; }
     let mu = 0; for (let i = 0; i < mi; i++) mu += s[i] * z[i]; mu = mi ? mu / mi : 0;
     const nrm = (v) => v.reduce((a, b) => Math.max(a, Math.abs(b)), 0);
-    if (nrm(rd) < tol && nrm(rp) < tol && nrm(ri) < tol && mu < tol) break;
-    const sigma = 0.1, N = n + me, K = zeros(N), rhs = new Float64Array(N);
+    const sc = 1 + Math.max(nrm(c), nrm(h), nrm(beq));
+    if (nrm(rd) < tol * sc && nrm(rp) < tol * sc && nrm(ri) < tol * sc && mu < tol * sc) break;
+    const sigma = it < 5 ? 0.3 : 0.1, N = n + me, K = zeros(N), rhs = new Float64Array(N);
     for (let j = 0; j < n; j++) { for (let k = 0; k < n; k++) K[j][k] = H[j][k]; K[j][j] += 1e-10; }
     for (let i = 0; i < mi; i++) {
       const d = z[i] / s[i], Gi = G[i];

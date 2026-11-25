@@ -1,7 +1,7 @@
 // 3D circuit builder view: palette, placement, property editor, DC/AC/transient analysis.
 import { h, card, kpis, fmt, btn, note, table, grid, download } from '../ui/dom.js';
 import { mount3D } from '../ui/three-mount.js';
-import { solveCircuit, sweep, transient, preset, PRESETS, TYPES } from '../engines/circuit.js';
+import { solveCircuit, sweep, transient, preset, PRESETS, TYPES, stress, thermalStep, AMBIENT } from '../engines/circuit.js';
 import { lineChart } from '../ui/charts.js';
 
 const UNIT = { R: 'Ω', LAMP: 'Ω', L: 'H', C: 'F', V: 'V', I: 'A' };
@@ -31,17 +31,17 @@ export default {
         h('div', { class: 'v3d-col' }, palette, view, hint),
         h('div', { class: 'side-col' },
           card('مدار', h('div', { class: 'row' }, presetSel), h('label', { class: 'field' }, h('span', { class: 'lbl' }, 'فرکانس منابع AC [Hz]'), fIn), h('label', { class: 'field check' }, h('span', { class: 'lbl' }, 'برچسب ولتاژ/جریان'), lblChk),
-            h('div', { class: 'row' }, btn('پاک کردن', () => { comps = []; sel = null; update(); }, 'ghost'), btn('ذخیره JSON', () => download('circuit.json', JSON.stringify(comps, null, 1), 'application/json'), 'ghost'), btn('بارگذاری', () => file.click(), 'ghost')), file),
+            h('div', { class: 'row' }, btn('تعمیر همه قطعات', () => { comps.forEach((c) => { c.burnt = false; c.temp = AMBIENT; }); update(); }, 'warn'), btn('پاک کردن', () => { comps = []; sel = null; update(); }, 'ghost'), btn('ذخیره JSON', () => download('circuit.json', JSON.stringify(comps, null, 1), 'application/json'), 'ghost'), btn('بارگذاری', () => file.click(), 'ghost')), file),
           card('ویژگی‌های قطعه', props))),
       res, charts,
-      note('نکات: پایانه + منابع، نقطه اول کلیک است. اگر قطعه زمین نگذارید، پایانه منفی اولین منبع مرجع ولتاژ است. اگر منبع AC وجود داشته باشد تحلیل فازوری در فرکانس داده‌شده انجام می‌شود (مقادیر RMS)؛ در غیر این صورت DC (خازن باز، سلف اتصال کوتاه). ذرات آبی جریان را نشان می‌دهند و رنگ گره‌ها ولتاژ را. مقادیر را با پیشوند وارد کنید: 100µ، 4.7k، 10m.'),
+      note('فیزیک واقعی: هر قطعه مقدار نامی دارد (توان مقاومت و لامپ، ولتاژ خازن الکترولیتی، جریان سیم/سلف/کلید/منبع). دما با مدل حرارتی مرتبه اول (T = Tamb + تنش×ΔTنامی با ثابت زمانی) بالا می‌رود؛ با عبور از حد تخریب، قطعه می‌سوزد، آتش و دود می‌گیرد و مدار باز می‌شود و مدار دوباره حل می‌شود. خازن الکترولیتی با ولتاژ معکوس DC منفجر می‌شود. رنگ نوارهای مقاومت با کد رنگ استاندارد از مقدار واقعی ساخته می‌شود و رنگ نور لامپ از دمای رنگ رشته تنگستن. نکات: پایانه + منابع، نقطه اول کلیک است. اگر قطعه زمین نگذارید، پایانه منفی اولین منبع مرجع ولتاژ است. اگر منبع AC وجود داشته باشد تحلیل فازوری در فرکانس داده‌شده انجام می‌شود (مقادیر RMS)؛ در غیر این صورت DC (خازن باز، سلف اتصال کوتاه). ذرات آبی جریان را نشان می‌دهند و رنگ گره‌ها ولتاژ را. مقادیر را با پیشوند وارد کنید: 100µ، 4.7k، 10m.'),
     );
 
     const c3 = await mount3D(view, '../three/circuit3d.js', 'Circuit3D', {
       onPlace: (a, b) => {
         const t = tool === 'VAC' ? 'V' : tool;
         if (!TYPES[t]) return;
-        const c = { id: 'c' + nextId++, type: t, a, b, value: TYPES[t].def };
+        const c = { id: 'c' + nextId++, type: t, a, b, value: TYPES[t].def, rating: TYPES[t].rating };
         if (tool === 'VAC') { c.ac = true; c.value = 230; }
         if (t === 'V' && tool === 'V') c.value = 12;
         if (t === 'S') c.closed = true;
@@ -69,6 +69,14 @@ export default {
         const acChk = h('input', { type: 'checkbox' }); acChk.checked = !!c.ac; acChk.addEventListener('change', () => { c.ac = acChk.checked; update(); });
         const ph = h('input', { type: 'number', value: c.phase || 0 }); ph.addEventListener('change', () => { c.phase = +ph.value; update(); });
         props.append(h('label', { class: 'field check' }, h('span', { class: 'lbl' }, 'متناوب (AC)'), acChk), h('label', { class: 'field' }, h('span', { class: 'lbl' }, 'فاز [deg]'), ph));
+      }
+      if (Number.isFinite(TYPES[c.type].rating)) {
+        const ri = h('input', { value: si(c.rating ?? TYPES[c.type].rating, '').trim() });
+        ri.addEventListener('change', () => { const v = parseSI(ri.value); if (v > 0) { c.rating = v; update(); } });
+        props.append(h('label', { class: 'field' }, h('span', { class: 'lbl' }, `مقدار نامی [${TYPES[c.type].rUnit}]` + (c.type === 'C' ? ' (ولتاژ کار، قطبی در DC)' : '')), ri));
+        const T = c.temp ?? AMBIENT, s0 = sol?.ok ? stress(c, sol.byId.get(c.id), sol.ac) : 0;
+        props.append(kpis([['دما', fmt(T, 0), '°C', c.burnt ? 'bad' : T > 120 ? 'warn' : 'ok'], ['تنش (نسبت به نامی)', fmt(s0, 2), '×', s0 > 1 ? 'bad' : 'ok'], ['وضعیت', c.burnt ? 'سوخته' : 'سالم', '', c.burnt ? 'bad' : 'ok']]));
+        if (c.burnt) props.append(btn('تعویض قطعه (تعمیر)', () => { c.burnt = false; c.temp = AMBIENT; update(); }, 'warn'));
       }
       if (c.type === 'S') props.append(btn(c.closed ? 'باز کردن کلید' : 'بستن کلید', () => { c.closed = !c.closed; update(); }, 'warn'));
       if (r && c.type !== 'GND' && c.type !== 'W') props.append(table([{ key: 'k', label: 'کمیت' }, { key: 'v', label: 'مقدار' }], [
@@ -112,6 +120,16 @@ export default {
       if (!light) { editor(); results(); } else { results(); }
     }
     update();
-    return () => c3?.dispose();
+    // real-time electro-thermal loop (10 Hz): heating, failure → open circuit → re-solve (cascading effects)
+    let lastEd = 0;
+    const timer = setInterval(() => {
+      if (!sol?.ok || !comps.length) return;
+      let failed = false;
+      comps.forEach((c) => { const r = sol.byId.get(c.id); if (thermalStep(c, c.burnt ? 0 : stress(c, r, sol.ac), 0.1)) failed = true; });
+      if (failed) { update(); return; }
+      c3?.setThermal(comps);
+      if (sel && Date.now() - lastEd > 500) { lastEd = Date.now(); const c = comps.find((x) => x.id === sel); if (c && document.activeElement?.tagName !== 'INPUT') editor(); }
+    }, 100);
+    return () => { clearInterval(timer); c3?.dispose(); };
   },
 };

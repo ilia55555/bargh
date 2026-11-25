@@ -19,8 +19,10 @@ import { pq, fundamentals } from './views/quality.js';
 import edit from './views/editor.js';
 import about from './views/about.js';
 import circuit from './views/circuit.js';
+import adv from './views/advopt.js';
+import script from './views/script.js';
 
-const VIEWS = [circuit, home, acpf, dcpf, ed, opf, n1, sc, prot, transient, smib, modal, vs, lfc, dist, rel, line, mach, pq, fundamentals, edit, about];
+const VIEWS = [circuit, home, acpf, dcpf, ed, opf, adv, n1, sc, prot, transient, smib, modal, vs, lfc, dist, rel, line, mach, pq, fundamentals, edit, script, about];
 let cleanup = null, current = null;
 
 function shell() {

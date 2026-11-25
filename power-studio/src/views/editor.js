@@ -2,6 +2,7 @@
 import { h, card, btn, note, download, kpis, fmt } from '../ui/dom.js';
 import { state, mutateCase, setCase } from '../ui/state.js';
 import { toMatpower, parseMatpower } from '../data/matpower.js';
+import { parseRaw, toRaw } from '../data/psse.js';
 import { caseSummary } from '../engines/network.js';
 
 const SPEC = {
@@ -17,12 +18,12 @@ export default {
   render(el) {
     const cs = state.cs, s = caseSummary(cs);
     el.append(kpis([['باس', s.buses, ''], ['شاخه', s.branches, ''], ['ژنراتور', s.gens, ''], ['ظرفیت تولید', fmt(s.Pcap, 0), 'MW'], ['بار', fmt(s.Pd, 1), 'MW']]));
-    const file = h('input', { type: 'file', accept: '.m,.txt', style: 'display:none' });
+    const file = h('input', { type: 'file', accept: '.m,.txt,.raw', style: 'display:none' });
     file.addEventListener('change', async () => {
       const f = file.files[0]; if (!f) return;
-      try { const c = parseMatpower(await f.text()); setCase('custom', c); } catch (e) { alert('خطا در خواندن فایل: ' + e.message); }
+      try { const txt = await f.text(); const c = /\.raw$/i.test(f.name) || !/mpc\./.test(txt) ? parseRaw(txt) : parseMatpower(txt); setCase('custom', c); } catch (e) { alert('خطا در خواندن فایل: ' + e.message); }
     });
-    el.append(card('ورود / خروج داده', h('div', { class: 'row' }, btn('بارگذاری فایل MATPOWER (.m)', () => file.click()), btn('دریافت MATPOWER', () => download(`${cs.name}.m`, toMatpower(cs)), 'ghost'), btn('دریافت JSON', () => download(`${cs.name}.json`, JSON.stringify(cs, null, 1), 'application/json'), 'ghost')), file,
+    el.append(card('ورود / خروج داده', h('div', { class: 'row' }, btn('بارگذاری MATPOWER (.m) یا PSS/E (.raw)', () => file.click()), btn('دریافت MATPOWER', () => download(`${cs.name}.m`, toMatpower(cs)), 'ghost'), btn('دریافت PSS/E RAW', () => download(`${cs.name}.raw`, toRaw(cs)), 'ghost'), btn('دریافت JSON', () => download(`${cs.name}.json`, JSON.stringify(cs, null, 1), 'application/json'), 'ghost')), file,
       note('هر فایل case استاندارد MATPOWER (نسخه ۲) پشتیبانی می‌شود. پس از ویرایش جدول‌ها «اعمال تغییرات» را بزنید تا پخش بار دوباره حل شود و همه ماژول‌ها به‌روز شوند.')));
     for (const [key, cols] of Object.entries(SPEC)) {
       const rows = cs[key];

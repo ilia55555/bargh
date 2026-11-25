@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { layoutCase, heat } from '../ui/layout.js';
 import { indexCase } from '../engines/network.js';
+import { Fire, Arc } from './fx.js';
 
 const SCALE = 42;
 const col = (rgb) => new THREE.Color(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
@@ -59,6 +60,8 @@ export class Network3D {
   setOptions(o) { Object.assign(this.opts, o); if (this.cs) this.build(this.cs, this.pf, this.extra); }
 
   clear() {
+    (this.lineFires || []).forEach((f) => f.dispose()); this.lineFires = [];
+    if (this.fault) { this.fault.fire.dispose(); this.fault.arc.dispose(); this.fault = null; }
     this.root.traverse((o) => { o.geometry?.dispose?.(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); if (o.isCSS2DObject) o.element.remove(); });
     this.scene.remove(this.root); this.root = new THREE.Group(); this.scene.add(this.root);
     this.pickables = []; this.gens = []; this.flows = []; this.busObjs = [];
@@ -152,6 +155,7 @@ export class Network3D {
           ring.lookAt(b); ring.userData = { kind: 'branch', k }; this.pickables.push(ring); this.root.add(ring);
         }
       }
+      if (on && res && res.loading > 150) { const f = new Fire(this.scene, mid.clone().setY(mid.y - 0.2), { scale: 1.2 }); this.lineFires.push(f); }
       if (!on || !pf || !this.opts.particles) return;
       const P = res.Pf, cnt = Math.max(1, Math.min(14, Math.round(len / 5 * (0.4 + load))));
       const dir = P >= 0 ? 1 : -1, speed = (0.08 + Math.min(1.6, Math.abs(P) / Math.max(br.rateA || cs.baseMVA * 3, 1))) * 0.6;
@@ -187,20 +191,17 @@ export class Network3D {
     this.root.add(mesh, wire);
   }
 
+  /** Fault at bus index i: arc to ground (plasma channel) and fire at the damage location. */
   setFault(i) {
-    if (this.fault) { this.root.remove(this.fault.grp); this.fault = null; }
+    if (this.fault) { this.fault.fire.dispose(); this.fault.arc.dispose(); this.fault = null; }
     if (i === null || i === undefined || i < 0) return;
-    const p = this.pos[i], grp = new THREE.Group();
-    const sph = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 16), new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.55 }));
-    grp.add(sph);
-    const pts = []; let y = 14; let x = 0;
-    while (y > 0) { pts.push(new THREE.Vector3(x, y, 0)); y -= 2.2; x = (Math.random() - 0.5) * 1.6; }
-    pts.push(new THREE.Vector3(0, 0, 0));
-    const bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffee55 }));
-    grp.add(bolt);
-    grp.position.copy(p); this.root.add(grp);
-    this.fault = { grp, sph, bolt };
+    const p = this.pos[i];
+    const fire = new Fire(this.scene, p.clone().setY(p.y + 0.4), { scale: 2.2 });
+    const arc = new Arc(this.scene, p.clone().setY(p.y + 0.2), new THREE.Vector3(p.x + 0.6, 0, p.z + 0.4));
+    this.fault = { fire, arc, active: true, i };
   }
+  /** Fault arc on/off (fault cleared → arc extinguished, fire smoulders). */
+  setFaultActive(on) { if (this.fault) this.fault.active = on; }
 
   /** Transient playback: data from simulateTransient, machine list with busIdx. */
   setPlayback(sim) { this.playback = sim ? { sim, idx: 0, playing: true } : null; this.mode = null; }
@@ -238,7 +239,12 @@ export class Network3D {
       f.inst.instanceMatrix.needsUpdate = true;
     }
     for (const g of this.gens || []) { g.rotor.rotation.x += dt * g.speed; g.ring.material.opacity = 0.35 + 0.25 * Math.sin(t * 3 + g.k); }
-    if (this.fault) { const s = 1 + 0.25 * Math.sin(t * 12); this.fault.sph.scale.setScalar(s); this.fault.bolt.visible = Math.sin(t * 25) > -0.3; }
+    if (this.fault) {
+      const F = this.fault;
+      F.fire.intensity += ((F.active ? 1 : 0.15) - F.fire.intensity) * Math.min(1, dt * 1.5); F.fire.update(dt);
+      if (F.active) F.arc.update(); else { F.arc.line.visible = false; F.arc.light.intensity = 0; }
+    }
+    for (const f of this.lineFires || []) f.update(dt);
     if (this.playback) this.animatePlayback(dt);
     if (this.mode) this.animateMode(t);
     if (this.sel) this.sel.rotation.z += dt;
@@ -251,6 +257,11 @@ export class Network3D {
     if (pb.playing) { pb.acc = (pb.acc || 0) + dt; const step = sim.t[1] - sim.t[0]; while (pb.acc > step * 2.5) { pb.acc -= step * 2.5; pb.idx = (pb.idx + 1) % sim.t.length; } }
     const k = pb.idx;
     this.onFrame?.(k);
+    if (sim.busV && this.busObjs) {
+      const v = sim.busV[k];
+      this.busObjs.forEach((m, i) => { const c = heat((v[i] - 0.5) / 0.6); m.material.color.setRGB(c[0] / 255, c[1] / 255, c[2] / 255); m.material.emissive.copy(m.material.color); m.position.y = 0.4 + v[i] * 8; });
+    }
+    if (sim.faultWindow && this.fault) { const tt = sim.t[k]; this.setFaultActive(tt >= sim.faultWindow[0] && tt < sim.faultWindow[1]); }
     sim.machines.forEach((mc, j) => {
       const g = this.gens.find((x) => x.k === mc.k); if (!g) return;
       const d = sim.delta[j][k], w = sim.omega[j][k];

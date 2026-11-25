@@ -11,22 +11,23 @@ export default {
   id: 'sc', title: 'اتصال کوتاه', icon: '💥', group: 'حفاظت و خطا',
   async render(el) {
     const cs = state.cs, pf = state.pf;
-    const Z = buildZbus(cs), pre = pf?.converged ? prefaultFromPF(pf) : null;
+    const Z0 = buildZbus(cs), Ziec = buildZbus(cs, { iec: { cmax: 1.1 } }), pre = pf?.converged ? prefaultFromPF(pf) : null;
     const f = paramForm([
       { key: 'bus', label: 'باس خطا', type: 'select', numeric: true, value: cs.bus[Math.min(3, cs.bus.length - 1)].id, options: cs.bus.map((b) => [b.id, `باس ${b.id}`]) },
       { key: 'type', label: 'نوع خطا', type: 'select', value: '3PH', options: [['3PH', 'سه‌فاز متقارن'], ['SLG', 'تک‌فاز به زمین'], ['LL', 'دوفاز'], ['DLG', 'دوفاز به زمین']] },
       { key: 'Rf', label: 'مقاومت خطا Rf', unit: 'pu', value: 0 }, { key: 'Xf', label: 'راکتانس خطا Xf', unit: 'pu', value: 0 },
-      { key: 'pre', label: 'ولتاژ پیش از خطا از پخش بار', type: 'checkbox', value: true },
+      { key: 'pre', label: 'ولتاژ پیش از خطا از پخش بار', type: 'checkbox', value: false },
+      { key: 'iec', label: 'روش IEC 60909 (c، KG، KT)', type: 'checkbox', value: true }, { key: 'c', label: 'ضریب ولتاژ c', value: 1.1 },
     ]);
     const out = h('div'), v3 = h('div', { class: 'v3d-mid' });
     let net = null;
     const run = () => {
       const o = f.get(), k = cs.bus.findIndex((b) => b.id === o.bus);
-      const r = faultAt(cs, Z, k, o.type, { Zf: C(o.Rf, o.Xf), prefault: o.pre ? pre : null });
+      const Z = o.iec ? Ziec : Z0, r = faultAt(cs, Z, k, o.type, { Zf: C(o.Rf, o.Xf), prefault: o.pre && !o.iec ? pre : null, c: o.iec ? o.c : null });
       out.innerHTML = '';
       out.append(kpis([
         ['جریان خطا', fmt(r.Ifault_pu, 3), 'pu'], ['جریان خطا', r.Ifault_kA ? fmt(r.Ifault_kA, 2) : '—', 'kA'], ['سطح اتصال کوتاه', r.Sfault_MVA ? fmt(r.Sfault_MVA, 0) : '—', 'MVA'],
-        ['X/R', fmt(r.XR, 2), ''], ['κ (IEC 60909)', fmt(r.kappa, 3), ''], ['ip/√2·I', r.Ifault_kA ? fmt(r.kappa * Math.SQRT2 * r.Ifault_kA, 2) : '—', 'kA پیک'],
+        ['X/R', fmt(r.XR, 2), ''], ['κ (IEC 60909)', fmt(r.kappa, 3), ''], ['ip (جریان ضربه)', r.ip_kA ? fmt(r.ip_kA, 2) : '—', 'kA پیک'], ['Ib (قطع)', r.Ib_kA ? fmt(r.Ib_kA, 2) : '—', 'kA'], ['Ith (۱ ثانیه)', r.Ith_kA ? fmt(r.Ith_kA, 2) : '—', 'kA'], ['idc در 100ms', r.idc_kA ? fmt(r.idc_kA, 2) : '—', 'kA'],
       ]));
       const seq = [['Z1 (مثبت)', r.Zth.Z1], ['Z2 (منفی)', r.Zth.Z2], ['Z0 (صفر)', r.Zth.Z0]].map(([n, z]) => ({ n, re: z.re, im: z.im }));
       const cur = [['I0', r.I0], ['I1', r.I1], ['I2', r.I2], ['Ia', r.Iabc[0]], ['Ib', r.Iabc[1]], ['Ic', r.Iabc[2]]].map(([n, c]) => ({ n, m: cabs(c), a: deg(carg(c)) }));
@@ -38,8 +39,8 @@ export default {
       net?.build(cs, null, { faultBus: k, busValues: { values: r.busV.map((b) => b.V1), lo: 0, hi: 1.05 } });
     };
     const scan = h('div');
-    el.append(card('مطالعه خطا (روش Zbus)', f.el, btn('محاسبه', run)), out, card('نمای سه‌بعدی: رنگ باس = ولتاژ دنباله مثبت حین خطا', v3), card('سطح اتصال کوتاه همه باس‌ها', scan));
-    const sc = faultScan(cs, Z, pre);
+    el.append(card('مطالعه خطا (روش Zbus)', f.el, btn('محاسبه', run)), out, card('نمای سه‌بعدی: قوس و آتش در محل خطا؛ رنگ باس = ولتاژ دنباله مثبت حین خطا', v3), card('سطح اتصال کوتاه همه باس‌ها', scan));
+    const sc = faultScan(cs, Z0, pre);
     const sEl = h('div'); scan.append(sEl, table([{ key: 'id', label: 'باس' }, { key: 'I3', label: 'I3φ pu', d: 3 }, { key: 'kA3', label: 'I3φ kA', d: 2 }, { key: 'S3', label: 'S3φ MVA', d: 0 }, { key: 'I1', label: 'ISLG pu', d: 3 }, { key: 'XR', label: 'X/R', d: 2 }], sc));
     const mx = Math.max(...sc.map((s) => s.I3));
     barChart(sEl, { labels: sc.map((s) => s.id), series: [{ values: sc.map((s) => s.I3), name: '3φ', color: '#e35d6a' }, { values: sc.map((s) => s.I1), name: 'SLG', color: '#4f9dff' }], yLabel: 'pu', height: 240, colors: undefined });

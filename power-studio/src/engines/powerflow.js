@@ -2,6 +2,7 @@
 // with generator reactive-limit enforcement (PV→PQ switching), branch flows and losses.
 import { makeYbus, indexCase, islands } from './network.js';
 import { zeros, solve, luFactor, luSolve } from '../lib/linalg.js';
+import { SpMat, spSolve } from '../lib/sparse.js';
 
 export function busTypes(cs, outGens = new Set()) {
   const n = cs.bus.length, idx = indexCase(cs);
@@ -27,12 +28,18 @@ export function busTypes(cs, outGens = new Set()) {
   return { type, Vset, ref, hasGen };
 }
 
+const ADJ = new WeakMap();
+export function adjacency(G, B) {
+  let a = ADJ.get(G);
+  if (!a) { a = G.map((r, i) => { const l = []; for (let k = 0; k < r.length; k++) if (r[k] !== 0 || B[i][k] !== 0) l.push(k); return l; }); ADJ.set(G, a); }
+  return a;
+}
 export function injections(G, B, V, th) {
-  const n = V.length, P = new Float64Array(n), Q = new Float64Array(n);
+  const n = V.length, P = new Float64Array(n), Q = new Float64Array(n), adj = adjacency(G, B);
   for (let i = 0; i < n; i++) {
     let p = 0, q = 0; const Gi = G[i], Bi = B[i];
-    for (let k = 0; k < n; k++) {
-      const g = Gi[k], b = Bi[k]; if (g === 0 && b === 0) continue;
+    for (const k of adj[i]) {
+      const g = Gi[k], b = Bi[k];
       const d = th[i] - th[k], c = Math.cos(d), s = Math.sin(d);
       p += V[k] * (g * c + b * s); q += V[k] * (g * s - b * c);
     }
@@ -75,6 +82,28 @@ export function jacobian(G, B, V, th, P, Q, ang, mag) {
   return J;
 }
 
+/** Sparse Jacobian (same layout as jacobian()). */
+export function jacobianSparse(G, B, V, th, P, Q, ang, mag) {
+  const na = ang.length, J = new SpMat(na + mag.length), adj = adjacency(G, B);
+  const posA = new Int32Array(V.length).fill(-1), posM = new Int32Array(V.length).fill(-1);
+  ang.forEach((b, i) => { posA[b] = i; }); mag.forEach((b, i) => { posM[b] = na + i; });
+  const fill = (r, i, isP) => {
+    for (const k of adj[i]) {
+      const g = G[i][k], b = B[i][k], ca = posA[k], cm = posM[k];
+      if (k === i) {
+        if (isP) { if (ca >= 0) J.set(r, ca, -Q[i] - b * V[i] * V[i]); if (cm >= 0) J.set(r, cm, P[i] / V[i] + g * V[i]); }
+        else { if (ca >= 0) J.set(r, ca, P[i] - g * V[i] * V[i]); if (cm >= 0) J.set(r, cm, Q[i] / V[i] - b * V[i]); }
+      } else {
+        const d = th[i] - th[k], c = Math.cos(d), s = Math.sin(d);
+        if (isP) { if (ca >= 0) J.set(r, ca, V[i] * V[k] * (g * s - b * c)); if (cm >= 0) J.set(r, cm, V[i] * (g * c + b * s)); }
+        else { if (ca >= 0) J.set(r, ca, -V[i] * V[k] * (g * c + b * s)); if (cm >= 0) J.set(r, cm, V[i] * (g * s - b * c)); }
+      }
+    }
+  };
+  ang.forEach((i, r) => fill(r, i, true)); mag.forEach((i, r) => fill(na + r, i, false));
+  return J;
+}
+
 function specified(cs, opts, types) {
   const n = cs.bus.length, idx = indexCase(cs), base = cs.baseMVA;
   const ls = opts.loadScale ?? 1, gs = opts.genScale ?? 1, outG = opts.outGens || new Set();
@@ -113,9 +142,10 @@ function nrCore(Y, V, th, Psp, Qsp, type, opts) {
     if (!Number.isFinite(nf) || nf > 1e6) break;
     if (nf < tol) { converged = true; break; }
     if (it === maxIter) break;
-    const J = jacobian(Y.G, Y.B, V, th, P, Q, pvpq, pq);
     let dx;
-    try { dx = solve(J, F); } catch { break; }
+    try {
+      dx = (opts.sparse ?? n > 60) ? spSolve(jacobianSparse(Y.G, Y.B, V, th, P, Q, pvpq, pq), F) : solve(jacobian(Y.G, Y.B, V, th, P, Q, pvpq, pq), F);
+    } catch { break; }
     pvpq.forEach((i, r) => { th[i] -= dx[r]; });
     pq.forEach((i, r) => { V[i] -= dx[pvpq.length + r]; });
   }

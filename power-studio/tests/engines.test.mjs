@@ -102,4 +102,34 @@ test('Circuit: RC transient reaches 63.2% at τ', () => {
   near(tr.v.get(p[3].id)[tr.t.length - 1], 5 * (1 - Math.exp(-1)), 0.01); void k;
 });
 
+test('Sparse NR equals dense NR (IEEE 39)', () => {
+  const cs = loadCase('case39'), a = runPowerFlow(cs, { sparse: true, flat: true }), b = runPowerFlow(cs, { sparse: false, flat: true });
+  for (let i = 0; i < 39; i++) near(a.V[i], b.V[i], 1e-10);
+});
+
+const DYN = await import('../src/engines/dynamics.js');
+test('Detailed dynamics: flat start equilibrium & fault response', () => {
+  const cs = loadCase('case39'), pf = runPowerFlow(cs);
+  const q = DYN.simulateDetailed(cs, pf, { tEnd: 1 });
+  q.omega.forEach((w) => near(Math.max(...w.map((x) => Math.abs(x - 1))), 0, 1e-5));
+  const f = DYN.simulateDetailed(cs, pf, { tEnd: 5, events: [{ t: 0.1, type: 'fault', bus: 15 }, { t: 0.2, type: 'clear' }, { t: 0.2, type: 'trip', branch: 27 }] });
+  assert.ok(f.stable); assert.ok(Math.min(...f.busV.map((v) => v[15])) < 0.05);
+});
+
+const RAW = await import('../src/data/psse.js');
+test('PSS/E RAW export/import round-trip (IEEE 39)', () => { const cs = loadCase('case39'), back = RAW.parseRaw(RAW.toRaw(cs)); assert.equal(back.bus.length, 39); assert.equal(back.branch.length, 46); near(runPowerFlow(back).lossP, runPowerFlow(cs).lossP, 1e-6); });
+test('IEC 60909: c=1.1 raises fault current vs flat 1.0', () => { const cs = loadCase('case39'), Z = buildZbus(cs, { iec: { cmax: 1.1 } }), r = faultAt(cs, Z, 15, '3PH', { c: 1.1 }); assert.ok(r.ip_kA > r.Ifault_kA * Math.SQRT2); assert.ok(r.Ith_kA >= r.Ifault_kA); });
+const ADV = await import('../src/engines/advopt.js');
+test('AC-OPF case9 ≈ MATPOWER runopf 5296.69 $/h', () => near(ADV.acOpf(loadCase('case9')).cost, 5296.69, 3));
+test('AC-OPF case39 ≈ MATPOWER runopf 41864.18 $/h', () => near(ADV.acOpf(loadCase('case39')).cost, 41864.18, 15));
+test('DC-SCOPF cost ≥ DC-OPF cost', () => { const cs = loadCase('case39'); assert.ok(ADV.dcScopf(cs).cost >= dcOpf(cs).totalCost - 1e-6); });
+test('Lagrangian UC duality gap < 1%', () => { const cs = loadCase('case39'), u = cs.gen.map((g, i) => ({ ...g, Pmin: g.Pmax * 0.3, SU: 2000, MU: 4, MD: 3, init: i < 6 ? 5 : -5 })); const d = Array.from({ length: 24 }, (_, h) => 6254 * (0.6 + 0.3 * Math.exp(-((h - 19) ** 2) / 12))); assert.ok(ADV.lagrangianUC(u, d).gap < 1); });
+
+test('Circuit: overloaded resistor heats and burns open; colour code', () => {
+  const p = CIR.preset('divider'); p[1].rating = 0.002; let burnt = false;
+  for (let t = 0; t < 40 && !burnt; t++) { const r = CIR.solveCircuit(p); burnt = CIR.thermalStep(p[1], CIR.stress(p[1], r.byId.get(p[1].id), r.ac), 0.25); }
+  assert.ok(burnt); near(CIR.solveCircuit(p).byId.get(p[0].id).Im, 0, 1e-9);
+  assert.deepEqual(CIR.resistorBands(4700).slice(0, 3), ['#ffd400', '#8a2be2', '#e00000']);
+});
+
 console.log(`\n${pass} tests passed`);

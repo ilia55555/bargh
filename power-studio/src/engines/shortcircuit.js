@@ -7,6 +7,7 @@ import { zeros, cinvMat } from '../lib/linalg.js';
 import { C, cadd, cmul, cdiv, cabs, carg, csub, cscale, seqToPhase, polar } from '../lib/complex.js';
 
 function seqY(cs, seq, opts) {
+  const cmax = opts.iec ? opts.iec.cmax ?? 1.1 : null;
   const n = cs.bus.length, idx = indexCase(cs), Gr = zeros(n), Bi = zeros(n);
   const genBus = new Set(cs.gen.filter((g) => g.status > 0).map((g) => idx.get(g.bus)));
   const addShunt = (i, yr, yi) => { Gr[i][i] += yr; Bi[i][i] += yi; };
@@ -29,14 +30,19 @@ function seqY(cs, seq, opts) {
       Gr[f][t] -= y.re; Bi[f][t] -= y.im; Gr[t][f] -= y.re; Bi[t][f] -= y.im;
       return;
     }
-    const a = branchAdmittance({ ...br, angle: seq === 2 ? -(br.angle || 0) : br.angle || 0, b: opts.ignoreCharging ? 0 : br.b });
+    let brx = br;
+    if (cmax && br.ratio) { const KT = (0.95 * cmax) / (1 + 0.6 * Math.abs(br.x)); brx = { ...br, r: br.r * KT, x: br.x * KT }; }
+    const a = branchAdmittance({ ...brx, angle: seq === 2 ? -(br.angle || 0) : br.angle || 0, b: opts.ignoreCharging || cmax ? 0 : br.b });
     Gr[f][f] += a.yff[0]; Bi[f][f] += a.yff[1]; Gr[t][t] += a.ytt[0]; Bi[t][t] += a.ytt[1];
     Gr[f][t] += a.yft[0]; Bi[f][t] += a.yft[1]; Gr[t][f] += a.ytf[0]; Bi[t][f] += a.ytf[1];
   });
   // generators
   cs.gen.forEach((g) => {
     if (g.status <= 0) return;
-    const i = idx.get(g.bus), x = seq === 0 ? 0.5 * g.xdp : g.xdp;
+    const i = idx.get(g.bus);
+    let xg = g.xdp;
+    if (cmax) { const Sr = Math.max(g.Pmax || 100, 1) / 0.85, xm = (g.xdp * Sr) / cs.baseMVA; xg *= cmax / (1 + xm * 0.527); } // KG, cos φrG = 0.85
+    const x = seq === 0 ? 0.5 * xg : xg;
     if (seq === 0) {
       // generator directly grounded only if the bus has no step-up transformer (simplification)
       const hasXf = cs.branch.some((br) => br.status && br.ratio && (idx.get(br.from) === i || idx.get(br.to) === i));
@@ -44,7 +50,7 @@ function seqY(cs, seq, opts) {
     }
     addShunt(i, 0, -1 / x);
   });
-  if (opts.loadsAsZ && seq !== 0) cs.bus.forEach((b, i) => { const v = 1; addShunt(i, b.Pd / cs.baseMVA / (v * v), -b.Qd / cs.baseMVA / (v * v)); });
+  if (opts.loadsAsZ && !cmax && seq !== 0) cs.bus.forEach((b, i) => { const v = 1; addShunt(i, b.Pd / cs.baseMVA / (v * v), -b.Qd / cs.baseMVA / (v * v)); });
   return { Gr, Bi };
 }
 
@@ -65,8 +71,8 @@ const zget = (Z, i, j) => C(Z.Zr[i][j], Z.Zi[i][j]);
 /**
  * Fault at bus index k. type: '3PH' | 'SLG' | 'LL' | 'DLG'. Zf complex (pu). prefault: array of complex voltages.
  */
-export function faultAt(cs, Z, k, type = '3PH', { Zf = C(0, 0), prefault = null } = {}) {
-  const n = cs.bus.length, Vf = prefault ? prefault[k] : C(1, 0);
+export function faultAt(cs, Z, k, type = '3PH', { Zf = C(0, 0), prefault = null, c = null } = {}) {
+  const n = cs.bus.length, Vf = c ? C(c, 0) : prefault ? prefault[k] : C(1, 0);
   const Z1 = zget(Z[1], k, k), Z2 = zget(Z[2], k, k), Z0 = zget(Z[0], k, k), Zf3 = cscale(Zf, 3);
   let I0 = C(), I1 = C(), I2 = C();
   if (type === '3PH') I1 = cdiv(Vf, cadd(Z1, Zf));
@@ -91,13 +97,21 @@ export function faultAt(cs, Z, k, type = '3PH', { Zf = C(0, 0), prefault = null 
     return { id: cs.bus[i].id, V1: cabs(V1), Va: cabs(abc[0]), Vb: cabs(abc[1]), Vc: cabs(abc[2]) };
   });
   const If = Math.max(...Iabc.map(cabs));
-  return {
+  const res = {
     bus: cs.bus[k].id, type, I0, I1, I2, Iabc, Ifault_pu: If, Ifault_kA: Ibase ? (If * Ibase) / 1000 : null,
     Sfault_MVA: type === '3PH' ? cabs(I1) * cabs(Vf) * base : null,
     Zth: { Z1, Z2, Z0 }, XR: Math.abs(Z1.im / (Z1.re || 1e-9)), busV,
     // asymmetrical peak factor (IEC 60909 κ = 1.02 + 0.98 e^{-3R/X})
     kappa: 1.02 + 0.98 * Math.exp(-3 / Math.max(Math.abs(Z1.im / (Z1.re || 1e-9)), 0.1)),
   };
+  // IEC 60909 derived quantities (far-from-generator approximations for Ib, thermal m with Tk = 1 s)
+  const R = res, kap = R.kappa, Ik = R.Ifault_kA;
+  if (Ik) {
+    const f = cs.freq || 50, XR = Math.max(R.XR, 0.1), lk = Math.log(Math.max(kap - 1, 1e-9));
+    const m = (Math.exp(4 * f * 1 * lk) - 1) / (2 * f * 1 * lk); // IEC 60909-0 eq. for Tk = 1 s
+    Object.assign(R, { ip_kA: kap * Math.SQRT2 * Ik, Ib_kA: Ik, Ith_kA: Ik * Math.sqrt(Math.max(m, 0) + 1), idc_kA: Math.SQRT2 * Ik * Math.exp((-2 * Math.PI * f * 0.1) / XR) });
+  }
+  return R;
 }
 
 /** Three-phase fault level scan at every bus. */

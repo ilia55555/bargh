@@ -5,11 +5,51 @@
 import { solve, csolveMat, zeros } from '../lib/linalg.js';
 
 const key = (p) => `${p[0]},${p[1]}`;
+// rating: R → W, LAMP → rated W at 230 V, C → V (electrolytic, polarised in DC), L/W/S/V/I → A
 export const TYPES = {
-  R: { label: 'مقاومت', unit: 'Ω', def: 100 }, L: { label: 'سلف', unit: 'H', def: 0.1 }, C: { label: 'خازن', unit: 'F', def: 100e-6 },
-  V: { label: 'منبع ولتاژ', unit: 'V', def: 230 }, I: { label: 'منبع جریان', unit: 'A', def: 1 }, W: { label: 'سیم', unit: '', def: 0 },
-  S: { label: 'کلید', unit: '', def: 0 }, LAMP: { label: 'لامپ', unit: 'Ω', def: 529 }, GND: { label: 'زمین', unit: '', def: 0 },
+  R: { label: 'مقاومت', unit: 'Ω', def: 100, rating: 0.5, rUnit: 'W', tau: 3, ambient: 25 },
+  L: { label: 'سلف', unit: 'H', def: 0.1, rating: 5, rUnit: 'A', tau: 4 },
+  C: { label: 'خازن الکترولیتی', unit: 'F', def: 100e-6, rating: 50, rUnit: 'V', tau: 1.5 },
+  V: { label: 'منبع ولتاژ', unit: 'V', def: 230, rating: 63, rUnit: 'A', tau: 1 },
+  I: { label: 'منبع جریان', unit: 'A', def: 1, rating: 1e3, rUnit: 'V', tau: 1 },
+  W: { label: 'سیم (2.5mm²)', unit: '', def: 0, rating: 24, rUnit: 'A', tau: 6 },
+  S: { label: 'کلید', unit: '', def: 0, rating: 16, rUnit: 'A', tau: 2 },
+  LAMP: { label: 'لامپ رشته‌ای', unit: 'Ω', def: 529, rating: 100, rUnit: 'W', tau: 0.25 },
+  GND: { label: 'زمین', unit: '', def: 0, rating: Infinity, rUnit: '', tau: 1 },
 };
+export const AMBIENT = 25, RATED_RISE = 100, FAIL_RISE = 260;
+
+/**
+ * Electro-thermal stress of a component (dimensionless, 1 = rated). Steady temperature rise ∝ stress.
+ * Power stress for R/LAMP, I² for conductors/inductors/sources, V² (peak) for capacitors, reverse
+ * polarity of electrolytic capacitors under DC → immediate overstress.
+ */
+export function stress(c, r, ac) {
+  if (!r || c.type === 'GND') return 0;
+  const rt = c.rating ?? TYPES[c.type].rating;
+  switch (c.type) {
+    case 'R': return Math.abs(r.P) / rt;
+    case 'LAMP': return Math.abs(r.P) / rt;
+    case 'C': { const vpk = r.Vm * (ac ? Math.SQRT2 : 1); if (!ac && r.V[0] < -1) return 8; if (vpk > 1.5 * rt) return 10; return (vpk / rt) ** 6; } // dielectric stress is strongly non-linear
+    case 'I': return (r.Vm / rt) ** 2;
+    default: return (r.Im / rt) ** 2;
+  }
+}
+/** Advance first-order thermal model; returns true when the component fails (open circuit). */
+export function thermalStep(c, s, dt) {
+  const tau = TYPES[c.type].tau, Tss = AMBIENT + s * RATED_RISE;
+  c.temp = (c.temp ?? AMBIENT) + ((Tss - (c.temp ?? AMBIENT)) * Math.min(1, dt / tau));
+  if (!c.burnt && c.temp > AMBIENT + FAIL_RISE) { c.burnt = true; c.burnAt = Date.now(); return true; }
+  return false;
+}
+/** Standard 4-band resistor colour code (E-series rounding to 2 significant digits). */
+export function resistorBands(R) {
+  const names = ['#000000', '#7b3f00', '#e00000', '#ff7a00', '#ffd400', '#00a000', '#0040ff', '#8a2be2', '#808080', '#ffffff'];
+  const e = Math.floor(Math.log10(Math.max(R, 0.1))) - 1, d = Math.round(R / 10 ** e);
+  const dd = d >= 100 ? 10 : d, ee = d >= 100 ? e + 1 : e;
+  const mult = ee >= 0 ? names[ee] ?? '#ffffff' : ee === -1 ? '#d4af37' : '#c0c0c0';
+  return [names[Math.floor(dd / 10)], names[dd % 10], mult, '#d4af37'];
+}
 
 /** Build node numbering (wires and closed switches merge nodes). */
 export function topology(comps) {
@@ -29,7 +69,8 @@ export function topology(comps) {
 const active = (c) => !['W', 'S', 'GND'].includes(c.type);
 
 /** Phasor/DC solution. If any AC source exists → AC at f (DC sources zeroed), else DC. */
-export function solveCircuit(comps, { f = 50, mode = null } = {}) {
+export function solveCircuit(allComps, { f = 50, mode = null } = {}) {
+  const comps = allComps.filter((c) => !c.burnt && !(c.type === 'S' && !c.closed && false));
   const T = topology(comps), n = T.n;
   const ac = mode ? mode === 'ac' : comps.some((c) => (c.type === 'V' || c.type === 'I') && c.ac);
   const w = ac ? 2 * Math.PI * f : 0;
@@ -76,6 +117,7 @@ export function solveCircuit(comps, { f = 50, mode = null } = {}) {
     return { id: c.id, V: v, I, Vm: Math.hypot(...v), Im: Math.hypot(...I), P, Q };
   });
   const nodeV = new Map(T.points.map((k) => { const p = k.split(',').map(Number), x = V(T.node(p)); return [k, x]; }));
+  allComps.forEach((c) => { if (c.burnt) { const va = nodeV.get(key(c.a)) || [0, 0], vb = nodeV.get(key(c.b)) || [0, 0]; const v = [va[0] - vb[0], va[1] - vb[1]]; res.push({ id: c.id, V: v, I: [0, 0], Vm: Math.hypot(...v), Im: 0, P: 0, Q: 0, burnt: true }); } });
   return { ok: true, ac, f, w, comps: res, nodeV, byId: new Map(res.map((r) => [r.id, r])) };
 }
 
@@ -94,8 +136,10 @@ export function sweep(comps, { f1 = 1, f2 = 1e5, pts = 120 } = {}) {
 }
 
 /** Transient (backward Euler). AC sources: v = √2·Vrms·sin(ωt+φ). Initial state: de-energised. */
-export function transient(comps, { f = 50, tEnd = 0.1, dt = 1e-4 } = {}) {
+export function transient(allComps, { f = 50, tEnd = 0.1, dt = 1e-4 } = {}) {
+  const comps = allComps.filter((c) => !c.burnt);
   const T = topology(comps), n = T.n, vs = comps.filter((c) => c.type === 'V'), N = n + vs.length, w = 2 * Math.PI * f;
+  allComps.filter((c) => c.burnt).forEach((c) => comps.push({ ...c, type: 'GND', a: c.a, b: c.a }));
   const st = new Map(comps.map((c) => [c.id, { v: 0, i: 0 }]));
   const out = { t: [], v: new Map(comps.map((c) => [c.id, []])), i: new Map(comps.map((c) => [c.id, []])) };
   const src = (c, t) => (c.ac ? Math.SQRT2 * c.value * Math.sin(w * t + ((c.phase || 0) * Math.PI) / 180) : c.value);
@@ -142,6 +186,7 @@ export function preset(name) {
     lamps: [C('V', [0, 2], [0, 0], 230, { ac: true }), C('W', [0, 2], [2, 2]), C('LAMP', [2, 2], [2, 0], 529), C('W', [2, 2], [4, 2]), C('S', [4, 2], [4, 1], 0, { closed: true }), C('LAMP', [4, 1], [4, 0], 1058), C('W', [4, 0], [2, 0]), C('W', [2, 0], [0, 0]), C('GND', [0, 0], [0, 0])],
   };
   const sh = (q) => [q[0] + 3, q[1] + 4];
-  return (P[name] || P.rlc).map((c) => ({ ...c, a: sh(c.a), b: sh(c.b) }));
+  const RT = { divider: { R: 0.25 }, rlc: { R: 25, L: 2, C: 63 }, pf: { R: 5000, L: 30, C: 450 }, rc: { R: 0.25, C: 16 }, lamps: { LAMP: 100 } };
+  return (P[name] || P.rlc).map((c) => ({ ...c, a: sh(c.a), b: sh(c.b), rating: c.type === 'LAMP' ? 230 ** 2 / c.value : RT[name]?.[c.type] ?? TYPES[c.type].rating }));
 }
 export const PRESETS = [['rlc', 'RLC سری (تشدید)'], ['pf', 'اصلاح ضریب توان با خازن'], ['divider', 'تقسیم ولتاژ DC'], ['rc', 'شارژ خازن RC'], ['lamps', 'لامپ‌های موازی با کلید']];

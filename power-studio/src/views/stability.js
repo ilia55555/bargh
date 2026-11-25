@@ -3,6 +3,7 @@
 import { h, card, kpis, fmt, btn, paramForm, note, table, grid } from '../ui/dom.js';
 import { state } from '../ui/state.js';
 import { simulateTransient, criticalClearingTime, equalArea, smibSwing } from '../engines/transient.js';
+import { simulateDetailed } from '../engines/dynamics.js';
 import { modalAnalysis } from '../engines/smallsignal.js';
 import { lineChart } from '../ui/charts.js';
 import { mount3D } from '../ui/three-mount.js';
@@ -22,12 +23,25 @@ export const transient = {
       { key: 'tFault', label: 'لحظه وقوع', unit: 's', value: 0.1 }, { key: 'tClear', label: 'لحظه رفع', unit: 's', value: 0.2 },
       { key: 'trip', label: 'خط قطع‌شده هنگام رفع خطا', type: 'select', numeric: true, value: defBr, options: brOpts },
       { key: 'tEnd', label: 'زمان شبیه‌سازی', unit: 's', value: 4 }, { key: 'D', label: 'میرایی D', unit: 'pu', value: 0 },
+      { key: 'model', label: 'مدل', type: 'select', value: 'detailed', options: [['detailed', 'دقیق: دومحوره + AVR + PSS + گاورنر'], ['classical', 'کلاسیک']] },
+      { key: 'avr', label: 'AVR/تحریک (ST1A)', type: 'checkbox', value: true }, { key: 'pss', label: 'پایدارساز PSS', type: 'checkbox', value: true }, { key: 'gov', label: 'گاورنر TGOV1', type: 'checkbox', value: true },
+      { key: 'ibr', label: 'ژنراتورهای تبدیل به اینورتر GFL (باس‌ها با کاما)', type: 'text', value: '' },
     ]);
     const out = h('div'), v3 = h('div', { class: 'v3d-mid' }), slider = h('input', { type: 'range', min: 0, max: 100, value: 0, class: 'wide' }), tlab = h('span', { class: 'mono' }, 't = 0');
     let net = null, sim = null;
     const run = () => {
       const o = f.get(), fb = idx.get(o.bus);
-      sim = simulateTransient(cs, pf, { faultBus: fb, tFault: o.tFault, tClear: o.tClear, tripBranch: o.trip, tEnd: o.tEnd, dt: 0.002, dampingD: o.D });
+      if (o.model === 'classical') sim = simulateTransient(cs, pf, { faultBus: fb, tFault: o.tFault, tClear: o.tClear, tripBranch: o.trip, tEnd: o.tEnd, dt: 0.002, dampingD: o.D });
+      else {
+        const ibrBuses = new Set(o.ibr.split(/[,\s]+/).map(Number).filter(Boolean));
+        const ibr = new Set(cs.gen.map((g, k) => (ibrBuses.has(g.bus) ? k : -1)).filter((k) => k >= 0));
+        const events = [{ t: o.tFault, type: 'fault', bus: fb }, { t: o.tClear, type: 'clear' }];
+        if (o.trip >= 0) events.push({ t: o.tClear, type: 'trip', branch: o.trip });
+        const d = simulateDetailed(cs, pf, { events, tEnd: o.tEnd, dt: 0.004, avr: o.avr, pss: o.pss, gov: o.gov, ibr, par: { D: o.D } });
+        const mx = d.delta.length ? Math.max(...d.delta.flatMap((x) => x)) - Math.min(...d.delta.flatMap((x) => x)) : 0;
+        sim = { ...d, pe: d.Pe, maxSepDeg: mx };
+      }
+      sim.faultWindow = [o.tFault, o.tClear];
       out.innerHTML = '';
       out.append(kpis([['وضعیت', sim.stable ? 'پایدار' : 'ناپایدار', '', sim.stable ? 'ok' : 'bad'], ['بیشینه اختلاف زاویه', fmt(sim.maxSepDeg, 1), 'deg'], ['زمان رفع', fmt(o.tClear - o.tFault, 3), 's'], ['لحظه ناپایداری', sim.unstableAt !== null ? fmt(sim.unstableAt, 3) : '—', 's']]));
       const a = h('div'), w = h('div'), p = h('div');
@@ -36,6 +50,14 @@ export const transient = {
       lineChart(a, { series: sim.delta.map((d, i) => ({ x: sim.t, y: d, name: names[i] })), xLabel: 't [s]', yLabel: 'δ − δCOI [deg]', height: 300, vlines: [{ x: o.tFault, label: 'خطا' }, { x: o.tClear, label: 'رفع' }] });
       lineChart(w, { series: sim.omega.map((d, i) => ({ x: sim.t, y: d.map((v) => (v - 1) * (cs.freq || 60)), name: names[i] })), xLabel: 't [s]', yLabel: 'Δf [Hz]', height: 240 });
       lineChart(p, { series: sim.pe.map((d, i) => ({ x: sim.t, y: d, name: names[i] })), xLabel: 't [s]', yLabel: 'Pe [pu]', height: 240 });
+      if (sim.Vt) {
+        const v = h('div'), e = h('div'), bv = h('div');
+        out.append(grid(card('ولتاژ ترمینال ژنراتورها', v), card('ولتاژ میدان Efd (خروجی AVR)', e)), card('ولتاژ باس خطا و باس‌های مجاور', bv));
+        lineChart(v, { series: sim.Vt.map((d, i) => ({ x: sim.t, y: d, name: names[i] })), xLabel: 't [s]', yLabel: 'Vt [pu]', height: 240 });
+        lineChart(e, { series: sim.Efd.map((d, i) => ({ x: sim.t, y: d, name: names[i] })), xLabel: 't [s]', yLabel: 'Efd [pu]', height: 240 });
+        const fb = idx.get(o.bus), nb = [fb, ...cs.branch.filter((b) => b.from === o.bus || b.to === o.bus).map((b) => idx.get(b.from === o.bus ? b.to : b.from))].slice(0, 6);
+        lineChart(bv, { series: nb.map((i) => ({ x: sim.t, y: sim.busV.map((f) => f[i]), name: `باس ${cs.bus[i].id}` })), xLabel: 't [s]', yLabel: '|V| [pu]', height: 240 });
+      }
       slider.max = sim.t.length - 1;
       if (net) { net.build(cs, pf, { faultBus: fb, outages: o.trip >= 0 ? new Set([o.trip]) : new Set() }); net.setPlayback(sim); net.onFrame = (k) => { slider.value = k; tlab.textContent = `t = ${sim.t[k].toFixed(2)} s`; }; }
     };
@@ -46,8 +68,8 @@ export const transient = {
     };
     slider.addEventListener('input', () => { if (net?.playback) { net.playback.playing = false; net.setFrame(+slider.value); } });
     const playBtn = btn('▶︎/⏸ پخش', () => { if (net?.playback) net.playback.playing = !net.playback.playing; }, 'ghost');
-    el.append(card('سناریوی خطا (مدل کلاسیک، شبکه کاهش‌یافته Kron، انتگرال‌گیری RK4)', f.el, h('div', { class: 'row' }, btn('شبیه‌سازی', run), btn('محاسبه CCT (دوبخشی)', cct, 'ghost')), cctBox),
-      card('پخش سه‌بعدی: ارتفاع ژنراتور = انحراف سرعت، رنگ = زاویه روتور', v3, h('div', { class: 'row' }, playBtn, slider, tlab)), out);
+    el.append(card('سناریوی خطا (مدل دقیق RMS یا کلاسیک)', f.el, h('div', { class: 'row' }, btn('شبیه‌سازی', run), btn('محاسبه CCT (دوبخشی)', cct, 'ghost')), cctBox),
+      card('پخش سه‌بعدی: محل خطا با قوس الکتریکی و آتش؛ ارتفاع/رنگ باس = ولتاژ لحظه‌ای؛ ارتفاع ژنراتور = انحراف سرعت، رنگ = زاویه روتور', v3, h('div', { class: 'row' }, playBtn, slider, tlab)), out);
     run();
     net = await mount3D(v3, '../three/network3d.js', 'Network3D', {});
     if (net) { net.opts.particles = false; run(); }
