@@ -23,7 +23,7 @@ export const transient = {
       { key: 'tFault', label: 'لحظه وقوع', unit: 's', value: 0.1 }, { key: 'tClear', label: 'لحظه رفع', unit: 's', value: 0.2 },
       { key: 'trip', label: 'خط قطع‌شده هنگام رفع خطا', type: 'select', numeric: true, value: defBr, options: brOpts },
       { key: 'tEnd', label: 'زمان شبیه‌سازی', unit: 's', value: 4 }, { key: 'D', label: 'میرایی D', unit: 'pu', value: 0 },
-      { key: 'model', label: 'مدل', type: 'select', value: 'detailed', options: [['detailed', 'دقیق: دومحوره + AVR + PSS + گاورنر'], ['classical', 'کلاسیک']] },
+      { key: 'model', label: 'مدل', type: 'select', value: 'detailed', options: [['detailed', 'زیرگذرا مرتبه ۶ + اشباع + AVR + PSS + گاورنر'], ['two', 'دومحوره مرتبه ۴ + AVR + PSS + گاورنر'], ['classical', 'کلاسیک']] },
       { key: 'avr', label: 'AVR/تحریک (ST1A)', type: 'checkbox', value: true }, { key: 'pss', label: 'پایدارساز PSS', type: 'checkbox', value: true }, { key: 'gov', label: 'گاورنر TGOV1', type: 'checkbox', value: true },
       { key: 'ibr', label: 'ژنراتورهای تبدیل به اینورتر GFL (باس‌ها با کاما)', type: 'text', value: '' },
     ]);
@@ -37,7 +37,7 @@ export const transient = {
         const ibr = new Set(cs.gen.map((g, k) => (ibrBuses.has(g.bus) ? k : -1)).filter((k) => k >= 0));
         const events = [{ t: o.tFault, type: 'fault', bus: fb }, { t: o.tClear, type: 'clear' }];
         if (o.trip >= 0) events.push({ t: o.tClear, type: 'trip', branch: o.trip });
-        const d = simulateDetailed(cs, pf, { events, tEnd: o.tEnd, dt: 0.004, avr: o.avr, pss: o.pss, gov: o.gov, ibr, par: { D: o.D } });
+        const d = simulateDetailed(cs, pf, { events, tEnd: o.tEnd, dt: 0.004, avr: o.avr, pss: o.pss, gov: o.gov, ibr, par: { D: o.D }, model: o.model === 'two' ? 'two' : 'sub' });
         const mx = d.delta.length ? Math.max(...d.delta.flatMap((x) => x)) - Math.min(...d.delta.flatMap((x) => x)) : 0;
         sim = { ...d, pe: d.Pe, maxSepDeg: mx };
       }

@@ -132,4 +132,43 @@ test('Circuit: overloaded resistor heats and burns open; colour code', () => {
   assert.deepEqual(CIR.resistorBands(4700).slice(0, 3), ['#ffd400', '#8a2be2', '#e00000']);
 });
 
+test('Sub-transient 6th-order model with saturation: equilibrium & stable fault', () => {
+  const cs = loadCase('case39'), pf = runPowerFlow(cs);
+  const q = DYN.simulateDetailed(cs, pf, { tEnd: 1, model: 'sub' }); q.omega.forEach((w) => near(Math.max(...w.map((x) => Math.abs(x - 1))), 0, 1e-5));
+  const two = DYN.simulateDetailed(cs, pf, { tEnd: 1, model: 'two', sat: false }); two.omega.forEach((w) => near(Math.max(...w.map((x) => Math.abs(x - 1))), 0, 1e-5));
+  const f = DYN.simulateDetailed(cs, pf, { tEnd: 4, model: 'sub', dt: 0.002, events: [{ t: 0.1, type: 'fault', bus: 15 }, { t: 0.2, type: 'clear' }, { t: 0.2, type: 'trip', branch: 27 }] });
+  assert.ok(f.stable);
+});
+
+const EMT = await import('../src/engines/emt.js');
+test('EMT: Bergeron line open-end voltage doubling at t = τ', () => {
+  const s = new EMT.EMT(1e-6); s.V('s', '0', 1, 1e-9, 90, 1e-3).BRK('s', 'a', { tClose: 0 }).LINE('a', 'b', 300, 1e-4, 0).R('b', '0', 1e9).probeV('vb', 'b');
+  const r = s.run(5e-4), y = r.probes[0].y; near(Math.max(...y), 2, 0.01); near(r.t[y.findIndex((x) => x > 0.5)], 1e-4, 3e-6);
+});
+test('EMT: RL circuit DC offset decays with τ = L/R; MOV clamps', () => {
+  const s = new EMT.EMT(1e-5); s.V('s', '0', 2, 50, 0, 1e-3).R('s', 'a', 10).MOV('a', '0', 1, 1, 25).probeV('va', 'a');
+  const v = Math.max(...s.run(0.02).probes[0].y); assert.ok(v < 1.0 && v > 0.85);
+  const c = EMT.runStudy('capSwitch', {}); assert.ok(Math.max(...c.peaks.filter((p) => p.name.startsWith('V')).map((p) => p.peak)) < 2.1);
+});
+const STO = await import('../src/engines/stochastic.js');
+const REL = await import('../src/engines/reliability.js');
+test('Wind Weibull capacity factor and solar CF are physical', () => {
+  const w = STO.windSeries(8760, { k: 2, c: 8.5 }), s = STO.solarSeries(8760, { lat: 32 });
+  assert.ok(w.cf > 0.2 && w.cf < 0.5); assert.ok(s.cf > 0.14 && s.cf < 0.3);
+});
+test('Sequential MC LOLE close to analytical COPT for same units', () => {
+  const units = Array.from({ length: 10 }, () => ({ cap: 100, MTTF: 960, MTTR: 40 })); // FOR = 0.04
+  const r = STO.sequentialMC(units, 800, { years: 400, tol: 0.06 });
+  const an = REL.adequacy(units.map((u) => ({ cap: u.cap, FOR: u.MTTR / (u.MTTF + u.MTTR) })), 800);
+  near(r.LOLE / an.LOLE_h, 1, 0.3);
+});
+test('Composite MC with DC-OPF load shedding (IEEE 14)', () => { const r = STO.compositeMC(loadCase('case14'), { samples: 500 }); assert.ok(r.LOLP >= 0 && r.LOLP < 0.5); });
+
+const PRJ = await import('../src/engines/project.js');
+test('Project study: 300 MW PV at IEEE-39 bus 16 produces full assessment', () => {
+  const R = PRJ.interconnectionStudy(loadCase('case39'), { type: 'pv', bus: 16, MW: 300, lat: 32 });
+  assert.ok(R.pf.post.converged); assert.ok(R.sc.SCR > 3); assert.ok(R.energy.CF > 0.14 && R.energy.CF < 0.3); assert.ok(R.hosting.MW > 0); assert.ok(R.lvrt.t.length > 10);
+  assert.ok(R.econ.LCOE > 20 && R.econ.LCOE < 120);
+});
+
 console.log(`\n${pass} tests passed`);

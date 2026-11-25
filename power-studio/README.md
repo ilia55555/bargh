@@ -52,6 +52,30 @@ Then open `http://localhost:8090`. three.js r160 loads from the jsDelivr CDN via
 - **PSS/E RAW** import/export (bus, load, fixed shunt, generator, branch, two-winding transformer).
 - **Script console**: JavaScript access to every engine, with log/plot/CSV helpers for batch studies.
 
+## Realism additions (v3)
+- **Sub-transient machine model**: 6th order (E′q, E′d, E″q, E″d, δ, ω) with open-circuit saturation. This is now the default dynamic model.
+- **EMT engine** (Dommel / trapezoidal) with:
+  - Bergeron travelling-wave lines (validated: wave doubling at the open end at t = τ)
+  - breakers that interrupt at current zero
+  - MOV arresters solved by Newton iteration inside each step
+  - saturable magnetising branch with residual flux
+- **EMT studies**: capacitor and back-to-back switching, line energisation, fault with TRV, transformer inrush.
+- **Stochastic models**:
+  - wind: Weibull + AR(1) + power curve
+  - PV: solar geometry, clear-sky model, Markov clouds, cell temperature
+- **Reliability Monte Carlo**:
+  - sequential MC adequacy with two-state Markov units, renewables and storage, with 95 % confidence intervals (agrees with analytical COPT)
+  - composite generation + transmission MC with DC-OPF load shedding and per-bus EENS
+- **Project studio**: a TSO/DSO-style interconnection study for PV, wind, BESS, gas or large-load projects, covering:
+  - N-0 and N-1 (only new or worsened violations are counted)
+  - IEC 60909 fault level and SCR
+  - voltage step on project trip
+  - hosting capacity, with the binding constraint
+  - RMS LVRT ride-through checked against the grid-code envelope
+  - P50/P90 energy over 30 weather years
+  - LCOE, NPV, IRR and payback
+  - a downloadable HTML report
+
 ## 3D (`src/three`)
 - **Realistic physics in the circuit builder**: every part has a rating (W, V or A). Temperature follows a first-order thermal model; parts that exceed their failure temperature burn open, with fire, smoke and an arc flash, and the circuit is solved again so the effects cascade. Electrolytic capacitors fail on reverse DC voltage or over-voltage. Resistor bands use the standard colour code, and lamp light follows the tungsten blackbody colour temperature.
 - **Network faults** are drawn as a plasma arc to ground plus fire at the fault bus, which smoulders after clearing. Lines loaded above 150 % catch fire (tree contact).
