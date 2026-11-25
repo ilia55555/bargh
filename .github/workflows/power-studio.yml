@@ -1,0 +1,19 @@
+name: power-studio
+on:
+  push:
+    paths: ['power-studio/**', '.github/workflows/power-studio.yml']
+  pull_request:
+    paths: ['power-studio/**']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: power-studio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm run check
+      - run: npm test

@@ -1,0 +1,52 @@
+# برق‌نما — Power-System Engineering Studio (three.js 3D)
+
+A self-contained, browser-only power-system engineering studio with a Persian (RTL) UI and interactive **three.js** 3D views. No build step and no backend. All numerical engines are plain ES modules that also run in Node for testing.
+
+## Run
+
+```bash
+cd power-studio
+python3 -m http.server 8090
+```
+
+Then open `http://localhost:8090`. three.js r160 loads from the jsDelivr CDN via an import map. If the CDN can't be reached, only the 3D panels are disabled.
+
+## Built-in networks
+- WSCC 3-machine 9-bus (Anderson & Fouad)
+- IEEE 14-bus
+- **IEEE 39-bus New England** (MATPOWER data, Pai classical dynamic data)
+- IEEE 33-bus radial distribution (Baran & Wu)
+- Any MATPOWER v2 `.m` case, loaded through the network editor (MATPOWER/JSON export is also supported)
+
+## Engines (`src/engines`)
+| Area | Implemented |
+|---|---|
+| AC power flow | Newton–Raphson (polar, full Jacobian), fast-decoupled XB, accelerated Gauss–Seidel; π-model, off-nominal taps, phase shifters, Q-limit PV→PQ switching, losses, loading |
+| DC methods | DC power flow, PTDF, LODF, LODF-based contingency screening |
+| Dispatch / market | λ-iteration ED (optional B-loss penalty factors), 24 h priority-list UC, DC-OPF solved with a primal-dual interior-point QP, LMPs with congestion component |
+| Short circuit | Zbus method with positive/negative/zero-sequence networks; 3φ, SLG, LL, DLG faults with fault impedance; bus-voltage sag; fault-level scan; X/R ratio and IEC 60909 κ factor |
+| Transient stability | Multi-machine classical model, Kron reduction, RK4 integration, fault followed by line trip, CCT by bisection; SMIB equal-area criterion and swing curve |
+| Small-signal | State matrix, eigenvalues (balance + Hessenberg + Francis QR), eigenvectors by inverse iteration, mode shapes, participation factors, mode classification |
+| Voltage stability | PV (nose) curves, QV curves, L-index, reduced-Jacobian Q–V modal sensitivities |
+| Security | Full AC N-1 (branches and generators), performance index, islanding detection |
+| Distribution | Backward/forward sweep, VSI, exhaustive search for optimal DG and capacitor placement |
+| Frequency | One- and two-area LFC: governor, (reheat) turbine, AGC/ACE, tie line, BESS virtual inertia / fast frequency response |
+| Reliability | COPT, LOLP, LOLE (hourly and daily peak), EENS; SAIFI, SAIDI, CAIDI, ASAI, ENS |
+| Protection | IEC 60255 / IEEE C37.112 IDMT curves, automatic radial coordination, TCC plots, mho distance zones, dual-slope differential relay |
+| Components | Line parameters from geometry (GMD/GMR, bundles), long-line, nominal-π and short-line ABCD models, SIL, Ferranti effect, power-angle curve; transformer OC/SC tests, efficiency and regulation; induction motor torque-speed curve; synchronous machine capability chart; harmonics (THD, K-factor); PF correction with resonance check; per-unit conversion; symmetrical components |
+
+## 3D (`src/three`)
+- **Network3D**: bus height follows voltage or angle, bus colour shows voltage, line colour and thickness show loading and power, and animated particles show power-flow direction. Also includes a voltage-landscape surface, click-to-inspect, click-to-trip lines, a fault marker, transient playback (rotor angle and speed), small-signal mode-shape animation, and an LMP heat map.
+- **Tower3D**: lattice towers, bundled conductors with catenary sag, shield wires, and the instantaneous phase current animated on each conductor.
+- **Field3D**: rotating magnetic field of a three-phase stator. With unbalance, the resultant traces an ellipse, which shows the negative-sequence component.
+
+## Tests
+```bash
+npm test
+```
+The tests check against published references: IEEE-14 and IEEE-39 MATPOWER solutions, the WSCC-9 slack output and DC-OPF cost (5216.03 $/h), the Baran-Wu 33-bus losses (202.67 kW, Vmin 0.9131), the WSCC-9 electromechanical modes (≈1.38 Hz and 2.13 Hz), the equal-area closed form, the LFC steady-state error, COPT normalisation and the IEC relay curve.
+
+## Modelling notes
+- Dynamics use the classical model with constant-impedance loads (an RMS positive-sequence model, not EMT).
+- Short-circuit assumptions: Z2 = Z1; generators are modelled with x′d; line Z0 = 3·Z1; generator step-up transformers are Δ on the generator side and grounded Y on the network side.
+- DC-OPF is lossless, and LMPs are split into energy and congestion components.
