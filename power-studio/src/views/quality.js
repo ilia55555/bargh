@@ -1,10 +1,9 @@
-// Power quality & fundamentals: harmonics, PF correction, symmetrical components (+3D rotating field), per-unit.
+// Power quality & fundamentals: harmonics, PF correction, symmetrical components, per-unit.
 import { h, card, kpis, fmt, btn, paramForm, note, grid } from '../ui/dom.js';
 import { harmonics, pfCorrection, perUnit, changeBase } from '../engines/components.js';
 import { phaseToSeq, polar, cabs, carg, deg } from '../lib/complex.js';
 import { lineChart, barChart } from '../ui/charts.js';
 import { phasorPlot } from './faults.js';
-import { mount3D } from '../ui/three-mount.js';
 
 export const pq = {
   id: 'pq', title: 'کیفیت توان و هارمونیک', icon: '🎵', group: 'تجهیزات',
@@ -31,14 +30,13 @@ export const pq = {
 };
 
 export const fundamentals = {
-  id: 'fund', title: 'مؤلفه‌های متقارن و میدان دوار', icon: '🧲', group: 'مبانی',
-  async render(el) {
+  id: 'fund', title: 'مؤلفه‌های متقارن و پریونیت', icon: '🧲', group: 'مبانی',
+  render(el) {
     const f = paramForm([
       { key: 'Va', label: '|Va|', value: 1 }, { key: 'aa', label: '∠Va°', value: 0 }, { key: 'Vb', label: '|Vb|', value: 0.8 }, { key: 'ab', label: '∠Vb°', value: -125 },
-      { key: 'Vc', label: '|Vc|', value: 1.05 }, { key: 'ac', label: '∠Vc°', value: 118 }, { key: 'spd', label: 'سرعت انیمیشن', value: 0.4 },
+      { key: 'Vc', label: '|Vc|', value: 1.05 }, { key: 'ac', label: '∠Vc°', value: 118 },
     ]);
-    const out = h('div'), v3 = h('div', { class: 'v3d-mid' });
-    let field = null;
+    const out = h('div');
     const run = () => {
       const o = f.get(), va = polar(o.Va, (o.aa * Math.PI) / 180), vb = polar(o.Vb, (o.ab * Math.PI) / 180), vc = polar(o.Vc, (o.ac * Math.PI) / 180);
       const [v0, v1, v2] = phaseToSeq(va, vb, vc);
@@ -48,17 +46,13 @@ export const fundamentals = {
       out.append(grid(card('فازورهای فاز', a), card('مؤلفه‌های متقارن', b)));
       phasorPlot(a, [{ m: o.Va, a: o.aa, name: 'Va', color: '#e35d6a' }, { m: o.Vb, a: o.ab, name: 'Vb', color: '#f2c94c' }, { m: o.Vc, a: o.ac, name: 'Vc', color: '#4f9dff' }]);
       phasorPlot(b, [{ m: cabs(v0), a: deg(carg(v0)), name: 'V0', color: '#9bbf3b' }, { m: cabs(v1), a: deg(carg(v1)), name: 'V1', color: '#3ccf91' }, { m: cabs(v2), a: deg(carg(v2)), name: 'V2', color: '#ff6fb5' }]);
-      field?.set({ amp: [o.Va, o.Vb, o.Vc], ph: [o.aa, o.ab, o.ac], speed: o.spd });
     };
-    el.append(card('ورودی ولتاژهای سه‌فاز', f.el, btn('محاسبه', run)), out, card('میدان مغناطیسی دوار سه‌بعدی — با نامتعادلی، مسیر برآیند (سبز) بیضوی می‌شود (اثر دنباله منفی)', v3));
-    run();
-    field = await mount3D(v3, '../three/field3d.js', 'Field3D', {});
+    el.append(card('ورودی ولتاژهای سه‌فاز', f.el, btn('محاسبه', run)), out);
     run();
     // per unit
     const p = paramForm([{ key: 'Sb', label: 'S پایه', unit: 'MVA', value: 100 }, { key: 'Vb', label: 'V پایه', unit: 'kV', value: 230 }, { key: 'z', label: 'Z پریونیت قدیم', value: 0.1 }, { key: 'Sold', label: 'S قدیم', unit: 'MVA', value: 50 }, { key: 'Vold', label: 'V قدیم', unit: 'kV', value: 220 }]);
     const pOut = h('div');
     const runP = () => { const o = p.get(), r = perUnit(o); pOut.innerHTML = ''; pOut.append(kpis([['I پایه', fmt(r.Ib, 2), 'A'], ['Z پایه', fmt(r.Zb, 3), 'Ω'], ['Y پایه', fmt(r.Yb * 1e3, 4), 'mS'], ['Z در پایه جدید', fmt(changeBase(o.z, { Vold: o.Vold, Sold: o.Sold, Vnew: o.Vb, Snew: o.Sb }), 5), 'pu']])); };
     el.append(card('سیستم پریونیت و تغییر پایه', p.el, btn('محاسبه', runP), pOut, note('Z_pu,new = Z_pu,old (V_old/V_new)² (S_new/S_old)'))); runP();
-    return () => field?.dispose();
   },
 };

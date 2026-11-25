@@ -27,7 +27,9 @@ export function lineChart(el, o) {
   (o.hlines || []).forEach((l) => { if (o.yMin === undefined) yMin = Math.min(yMin, l.y); if (o.yMax === undefined) yMax = Math.max(yMax, l.y); });
   if (!o.logY && o.yMin === undefined && o.yMax === undefined) { const pad = (yMax - yMin) * 0.06 || Math.abs(yMax) * 0.05 || 1; yMin -= pad; yMax += pad; }
   if (!Number.isFinite(xMin)) { xMin = 0; xMax = 1; } if (!Number.isFinite(yMin)) { yMin = 0; yMax = 1; }
-  if (xMax === xMin) { xMax += 1; xMin -= 1; }
+  if (xMax === xMin) { if (o.logX) { xMax *= 2; xMin /= 2; } else { xMax += 1; xMin -= 1; } }
+  if (o.logY && yMax / yMin < 1.01) { yMax *= 2; yMin /= 2; }
+  if (!o.logY && yMax === yMin) { yMax += 1; yMin -= 1; }
   if (o.equal) { const cx = (xMin + xMax) / 2, cy = (yMin + yMax) / 2, k = Math.max((xMax - xMin) / pw, (yMax - yMin) / ph); xMin = cx - (k * pw) / 2; xMax = cx + (k * pw) / 2; yMin = cy - (k * ph) / 2; yMax = cy + (k * ph) / 2; }
   const tx = (v) => (o.logX ? Math.log10(v) : v), ty = (v) => (o.logY ? Math.log10(v) : v);
   const sx = (v) => m.l + ((tx(v) - tx(xMin)) / (tx(xMax) - tx(xMin))) * pw;

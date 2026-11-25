@@ -90,4 +90,16 @@ test('QP solver: simple bound-constrained problem', () => { const r = qpSolve({ 
 test('Symmetrical components of a balanced set', () => { const [z, p, n] = phaseToSeq(polar(1, 0), polar(1, -2.0944), polar(1, 2.0944)); near(cabs(p), 1, 1e-4); near(cabs(z) + cabs(n), 0, 1e-4); });
 test('MATPOWER export/import round-trip', () => { const cs = loadCase('case14'), back = parseMatpower(toMatpower(cs)); assert.equal(back.bus.length, 14); near(runPowerFlow(back).lossP, runPowerFlow(cs).lossP, 1e-9); });
 
+const CIR = await import('../src/engines/circuit.js');
+test('Circuit: DC voltage divider', () => { const p = CIR.preset('divider'), r = CIR.solveCircuit(p); near(r.byId.get(p[2].id).Vm, 8, 1e-6); });
+test('Circuit: RLC series at resonance draws V/R', () => { const p = CIR.preset('rlc'), r = CIR.solveCircuit(p, { f: 1 / (2 * Math.PI * Math.sqrt(0.1 * 101.3e-6)) }); near(r.byId.get(p[0].id).Im, 1, 1e-6); });
+test('Circuit: PF capacitor reduces source current', () => {
+  const p = CIR.preset('pf'), with_ = CIR.solveCircuit(p).byId.get(p[0].id).Im;
+  const nocap = CIR.solveCircuit(p.filter((c) => c.type !== 'C')).byId.get(p[0].id).Im; assert.ok(with_ < nocap);
+});
+test('Circuit: RC transient reaches 63.2% at τ', () => {
+  const p = CIR.preset('rc'), tr = CIR.transient(p, { tEnd: 0.01, dt: 1e-6 }), k = tr.t.findIndex((t) => t >= 0.01 - 1e-9);
+  near(tr.v.get(p[3].id)[tr.t.length - 1], 5 * (1 - Math.exp(-1)), 0.01); void k;
+});
+
 console.log(`\n${pass} tests passed`);

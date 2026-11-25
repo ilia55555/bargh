@@ -118,3 +118,8 @@ input.wide { flex: 1; min-width: 160px; accent-color: var(--accent); }
   .topbar { flex-wrap: wrap; }
   .v3d-big { height: 60vh; }
 }
+.palette { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.tool { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 5px 10px; cursor: pointer; font-size: 13px; }
+.tool:hover { border-color: var(--accent); }
+.tool.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.lbl3d.comp { background: rgba(40,30,0,.75); border-color: rgba(242,201,76,.5); color: #ffe9a6; }

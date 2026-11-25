@@ -18,8 +18,9 @@ import mach from './views/machines.js';
 import { pq, fundamentals } from './views/quality.js';
 import edit from './views/editor.js';
 import about from './views/about.js';
+import circuit from './views/circuit.js';
 
-const VIEWS = [home, acpf, dcpf, ed, opf, n1, sc, prot, transient, smib, modal, vs, lfc, dist, rel, line, mach, pq, fundamentals, edit, about];
+const VIEWS = [circuit, home, acpf, dcpf, ed, opf, n1, sc, prot, transient, smib, modal, vs, lfc, dist, rel, line, mach, pq, fundamentals, edit, about];
 let cleanup = null, current = null;
 
 function shell() {
@@ -44,8 +45,8 @@ function updateStatus() {
   s.textContent = pf?.converged ? `پخش بار ✓ ${pf.method} · ${pf.iterations} تکرار · تلفات ${pf.lossP.toFixed(2)} MW` : 'پخش بار همگرا نشد';
 }
 async function route(force = false) {
-  const id = location.hash.slice(1) || 'home';
-  const v = VIEWS.find((x) => x.id === id) || home;
+  const id = location.hash.slice(1) || 'circuit';
+  const v = VIEWS.find((x) => x.id === id) || circuit;
   if (!force && current === v) return;
   current = v;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.id === v.id));

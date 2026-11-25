@@ -36,15 +36,14 @@ Then open `http://localhost:8090`. three.js r160 loads from the jsDelivr CDN via
 | Components | Line parameters from geometry (GMD/GMR, bundles), long-line, nominal-π and short-line ABCD models, SIL, Ferranti effect, power-angle curve; transformer OC/SC tests, efficiency and regulation; induction motor torque-speed curve; synchronous machine capability chart; harmonics (THD, K-factor); PF correction with resonance check; per-unit conversion; symmetrical components |
 
 ## 3D (`src/three`)
-- **Network3D**: bus height follows voltage or angle, bus colour shows voltage, line colour and thickness show loading and power, and animated particles show power-flow direction. Also includes a voltage-landscape surface, click-to-inspect, click-to-trip lines, a fault marker, transient playback (rotor angle and speed), small-signal mode-shape animation, and an LMP heat map.
-- **Tower3D**: lattice towers, bundled conductors with catenary sag, shield wires, and the instantaneous phase current animated on each conductor.
-- **Field3D**: rotating magnetic field of a three-phase stator. With unbalance, the resultant traces an ellipse, which shows the negative-sequence component.
+- **Circuit3D: 3D circuit builder** (the default page). Place resistors, capacitors, inductors, DC/AC voltage sources, current sources, lamps, switches, wires and ground on a breadboard grid by clicking two points. Each component's value can be set with SI prefixes or a continuous slider, and switches can be opened and closed. The circuit is solved with modified nodal analysis (DC or AC phasor). Node colours show voltage, animated particles show current, and lamps glow with their power. The page also shows a frequency response and the switch-on transient (backward Euler), and includes ready-made circuits: RLC resonance, PF correction with a capacitor, a voltage divider, RC charging and parallel lamps. Circuits are saved and loaded as JSON.
+- **Network3D**: the solved grid shown in 3D, with voltage height and colour, line loading, power-flow particles, fault, transient playback, mode shapes and an LMP heat map.
 
 ## Tests
 ```bash
 npm test
 ```
-The tests check against published references: IEEE-14 and IEEE-39 MATPOWER solutions, the WSCC-9 slack output and DC-OPF cost (5216.03 $/h), the Baran-Wu 33-bus losses (202.67 kW, Vmin 0.9131), the WSCC-9 electromechanical modes (≈1.38 Hz and 2.13 Hz), the equal-area closed form, the LFC steady-state error, COPT normalisation and the IEC relay curve.
+The tests check against published references: IEEE-14 and IEEE-39 MATPOWER solutions, the WSCC-9 slack output and DC-OPF cost (5216.03 $/h), the Baran-Wu 33-bus losses (202.67 kW, Vmin 0.9131), the WSCC-9 electromechanical modes (≈1.38 Hz and 2.13 Hz), the equal-area closed form, the circuit-solver checks (voltage divider, RLC resonance, PF correction, RC time constant), the LFC steady-state error, COPT normalisation and the IEC relay curve.
 
 ## Modelling notes
 - Dynamics use the classical model with constant-impedance loads (an RMS positive-sequence model, not EMT).
