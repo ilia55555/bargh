@@ -1,5 +1,6 @@
 // Application shell: case selector, navigation, routing between views.
 import { h } from './ui/dom.js';
+import { LANG, setLang, applyDir, loadDict, watch, T, tr } from './ui/i18n.js';
 import { state, setCase, onChange } from './ui/state.js';
 import { CASE_LIST } from './data/cases.js';
 import home from './views/home3d.js';
@@ -24,8 +25,11 @@ import script from './views/script.js';
 import emt from './views/emt.js';
 import renew from './views/renewables.js';
 import project from './views/project.js';
+import events from './views/events.js';
+import se from './views/estimation.js';
+import mg from './views/microgrid.js';
 
-const VIEWS = [project, circuit, home, acpf, dcpf, ed, opf, adv, n1, sc, prot, transient, smib, modal, vs, lfc, emt, dist, rel, renew, line, mach, pq, fundamentals, edit, script, about];
+const VIEWS = [project, events, circuit, home, acpf, dcpf, ed, opf, adv, mg, n1, se, sc, prot, transient, smib, modal, vs, lfc, emt, dist, rel, renew, line, mach, pq, fundamentals, edit, script, about];
 let cleanup = null, current = null;
 
 function shell() {
@@ -33,13 +37,15 @@ function shell() {
   sel.value = state.caseKey;
   sel.addEventListener('change', () => setCase(sel.value));
   const status = h('span', { id: 'pfStatus', class: 'pill' });
+  const langBtn = h('button', { class: 'icon-btn lang-btn', title: 'Language / زبان', onclick: () => { setLang(LANG === 'en' ? 'fa' : 'en'); location.reload(); } }, LANG === 'en' ? 'فا' : 'EN');
   const theme = h('button', { class: 'icon-btn', title: 'تغییر تم', onclick: () => { const r = document.documentElement; r.dataset.theme = r.dataset.theme === 'light' ? 'dark' : 'light'; try { localStorage.setItem('ps-theme', r.dataset.theme); } catch { /* ignore */ } } }, '◐');
   const menuBtn = h('button', { class: 'icon-btn menu-btn', onclick: () => document.body.classList.toggle('nav-open') }, '☰');
+  VIEWS.forEach((v) => { v.group = tr(v.group); v.title = tr(v.title); });
   const groups = [...new Set(VIEWS.map((v) => v.group))];
   const nav = h('nav', { id: 'nav' }, groups.map((g) => h('div', { class: 'nav-group' }, h('div', { class: 'nav-title' }, g), VIEWS.filter((v) => v.group === g).map((v) => h('a', { href: '#' + v.id, 'data-id': v.id }, h('span', { class: 'ico' }, v.icon), v.title)))));
   const main = h('main', { id: 'main' });
   document.body.append(
-    h('header', { class: 'topbar' }, menuBtn, h('div', { class: 'brand' }, h('span', { class: 'logo' }, '⚡'), h('div', {}, h('b', {}, 'برق‌نما'), h('small', {}, 'استودیوی مهندسی سیستم‌های قدرت'))), h('div', { class: 'top-right' }, h('label', { class: 'case-pick' }, 'شبکه: ', sel), status, theme)),
+    h('header', { class: 'topbar' }, menuBtn, h('div', { class: 'brand' }, h('span', { class: 'logo' }, '⚡'), h('div', {}, h('b', {}, 'برق‌نما'), h('small', {}, 'استودیوی مهندسی سیستم‌های قدرت'))), h('div', { class: 'top-right' }, h('label', { class: 'case-pick' }, T('Network: ', 'شبکه: '), sel), status, langBtn, theme)),
     h('div', { class: 'layout' }, nav, main),
   );
   onChange(() => { sel.value = state.caseKey; updateStatus(); route(true); });
@@ -67,7 +73,11 @@ async function route(force = false) {
   catch (e) { console.error(e); body.append(h('div', { class: 'note bad' }, 'خطا: ' + e.message)); }
 }
 try { const t = localStorage.getItem('ps-theme'); if (t) document.documentElement.dataset.theme = t; } catch { /* ignore */ }
+applyDir();
+if (LANG === 'en') await loadDict();
+document.title = T('Barghnama — Power-System Studio', 'برق‌نما — استودیوی سیستم‌های قدرت');
 shell();
+watch(document.body);
 setCase('case39');
 window.addEventListener('hashchange', () => route());
 window.addEventListener('pf-solved', updateStatus);

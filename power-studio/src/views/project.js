@@ -5,6 +5,8 @@ import { interconnectionStudy, reportHTML, PROJECT_TYPES, DEFAULTS, withProject 
 import { runPowerFlow } from '../engines/powerflow.js';
 import { lineChart, barChart } from '../ui/charts.js';
 import { mount3D } from '../ui/three-mount.js';
+import { LANG, translateDOM } from '../ui/i18n.js';
+const localise = (html) => { if (LANG !== 'en') return html; const d = new DOMParser().parseFromString(html, 'text/html'); translateDOM(d.documentElement); d.documentElement.dir = 'ltr'; d.documentElement.lang = 'en'; return '<!doctype html>' + d.documentElement.outerHTML; };
 
 export default {
   id: 'project', title: 'استودیوی پروژه واقعی', icon: '🏗️', group: 'نمای کلی',
@@ -29,7 +31,7 @@ export default {
         const t = performance.now(), R = interconnectionStudy(cs, P, { dynamics: o.dyn, onStep: (s) => { prog.textContent = s; } });
         last = R; prog.textContent = `مطالعات کامل شد (${fmt((performance.now() - t) / 1000, 1)} s)`;
         out.append(card('نتیجه‌گیری', h('div', { class: 'note ' + (R.verdict.ok ? '' : 'bad') }, R.verdict.ok ? '✔ اتصال بدون نیاز به تقویت شبکه قابل تأیید است.' : '✘ اتصال مشروط به رفع موارد زیر است:', R.verdict.issues.length ? h('ul', {}, R.verdict.issues.map((i) => h('li', {}, i))) : ''),
-          btn('دریافت گزارش کامل (HTML)', () => download(`interconnection_${o.type}_${o.MW}MW_bus${o.bus}.html`, reportHTML(cs, R), 'text/html'))));
+          btn('دریافت گزارش کامل (HTML)', () => download(`interconnection_${o.type}_${o.MW}MW_bus${o.bus}.html`, localise(reportHTML(cs, R)), 'text/html'))));
         out.append(kpis([
           ['ولتاژ POI قبل/بعد', `${fmt(R.pf.base.V, 4)} / ${fmt(R.pf.post.V, 4)}`, 'pu'], ['تلفات قبل/بعد', `${fmt(R.pf.base.loss, 1)} / ${fmt(R.pf.post.loss, 1)}`, 'MW'],
           ['N-1 ناامن قبل/بعد', `${R.n1.base} / ${R.n1.post}`, '', R.n1.post > R.n1.base ? 'bad' : 'ok'], ['S″k در POI', fmt(R.sc.SkBase, 0), 'MVA'], ['SCR', R.sc.SCR ? fmt(R.sc.SCR, 2) : '—', '', R.sc.weak ? 'bad' : 'ok'],

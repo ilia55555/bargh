@@ -128,3 +128,8 @@ pre.console { direction: ltr; text-align: left; max-height: 320px; overflow: aut
 .uc-grid { display: flex; flex-direction: column; gap: 3px; direction: ltr; }
 .uc-row { display: grid; grid-template-columns: 56px repeat(24, 1fr); gap: 2px; align-items: center; font-size: 11px; }
 .uc-row i { height: 14px; border-radius: 2px; border: 1px solid var(--line); }
+.lang-btn { font-weight: 700; font-size: 13px; width: auto; padding: 0 10px; }
+[dir="ltr"] nav a.active { box-shadow: inset 3px 0 0 var(--accent); background: linear-gradient(270deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent); }
+[dir="ltr"] .kpi-v { text-align: left; }
+@media (max-width: 760px) { [dir="ltr"] nav { transform: translateX(-110%); } [dir="ltr"] body.nav-open nav, body.nav-open nav { transform: none; } }
+[dir="ltr"] table.data th { text-align: left; }

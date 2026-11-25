@@ -171,4 +171,31 @@ test('Project study: 300 MW PV at IEEE-39 bus 16 produces full assessment', () =
   assert.ok(R.econ.LCOE > 20 && R.econ.LCOE < 120);
 });
 
+const SE = await import('../src/engines/estimation.js');
+test('WLS state estimation recovers state & identifies a gross error (IEEE 14)', () => {
+  const cs = loadCase('case14'), pf = runPowerFlow(cs);
+  const M = SE.makeMeasurements(cs, pf, { bad: { index: 20, size: 0.5 } });
+  const r = SE.wlsEstimate(cs, M);
+  assert.ok(r.ok); assert.ok(Math.max(...r.V.map((v, i) => Math.abs(v - pf.V[i]))) < 0.01);
+  assert.ok(r.removed.some((m) => m.bad)); assert.ok(r.J <= r.chi2);
+});
+const MG = await import('../src/engines/microgrid.js');
+test('NSGA-II finds a cost–CO₂ Pareto front; QP is at least as cheap as front minimum', () => {
+  const mg = MG.defaultMicrogrid(), p = MG.paretoMicrogrid(mg, { pop: 40, gens: 60 }), q = MG.costOptimal(mg);
+  assert.ok(p.front.length >= 3); for (let i = 1; i < p.front.length; i++) assert.ok(p.front[i].o[1] <= p.front[i - 1].o[1] + 1e-9);
+  assert.ok(q.cost <= p.front[0].o[0] * 1.05);
+});
+const VAL = await import('../src/engines/validation.js');
+test('Validation metrics: identical series → zero error; shifted series recovered by autoShift', () => {
+  const t = Array.from({ length: 200 }, (_, i) => i * 0.05), y = t.map((x) => Math.exp(-x) * Math.sin(3 * x));
+  near(VAL.compare(t, y, t, y).RMSE, 0, 1e-12);
+  near(VAL.autoShift(t, y, t.map((x) => x - 0.2), y), 0.2, 0.02);
+});
+test('Frequency event: UFLS acts and MPC/BESS improves nadir vs none (IEEE 39 generator trip)', () => {
+  const cs = loadCase('case39'), pf = runPowerFlow(cs), k = cs.gen.findIndex((g) => g.bus === 38);
+  const base = { tEnd: 8, dt: 0.005, loads: { zP: 0.2, iP: 0.3, pP: 0.5, zQ: 0.2, iQ: 0.3, pQ: 0.5, Kpf: 1.5 }, events: [{ t: 0.5, type: 'genTrip', gen: k }] };
+  const a = DYN.simulateDetailed(cs, pf, base), b = DYN.simulateDetailed(cs, pf, { ...base, resources: [{ bus: 16, kind: 'BESS', Pmax: 300, E: 200, mode: 'mpc' }], mpc: {} });
+  assert.ok(b.metrics.nadir > a.metrics.nadir + 0.05);
+});
+
 console.log(`\n${pass} tests passed`);

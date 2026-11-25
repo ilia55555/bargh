@@ -52,6 +52,21 @@ Then open `http://localhost:8090`. three.js r160 loads from the jsDelivr CDN via
 - **PSS/E RAW** import/export (bus, load, fixed shunt, generator, branch, two-winding transformer).
 - **Script console**: JavaScript access to every engine, with log/plot/CSV helpers for batch studies.
 
+## v4: sudden events, estimation, microgrid, bilingual UI
+- **Sudden-event & frequency studies**: generator/plant trip (N-1, N-2), load step, line trip and faults, simulated on the full network with:
+  - 6th-order machines with AVR, PSS and governors
+  - ZIP and frequency-dependent loads
+  - staged UFLS and UVLS
+  - generator under/over-frequency and pole-slip protection, so cascades through to a blackout are reproduced
+  - AGC
+  - BESS and EV/V2G fleets (SOC and ramp limits) under droop, grid-forming VSG or **MPC** control
+  - grid-code compliance check (nadir, RoCoF, steady-state deviation)
+  - an event timeline and 3D playback in which tripped units burn
+  - validation against measured or reference CSV traces: auto time alignment, RMSE/MAE/NRMSE/R and nadir error
+- **AC state estimation**: WLS (Gauss–Newton), χ² detection, largest-normalised-residual identification and removal.
+- **Microgrid scheduling**: least-cost QP and an **NSGA-II** cost/CO₂ Pareto front.
+- **Bilingual UI**: English by default, Persian (RTL) via the language button. Translations live in `src/data/i18n.js`.
+
 ## Realism additions (v3)
 - **Sub-transient machine model**: 6th order (E′q, E′d, E″q, E″d, δ, ω) with open-circuit saturation. This is now the default dynamic model.
 - **EMT engine** (Dommel / trapezoidal) with:

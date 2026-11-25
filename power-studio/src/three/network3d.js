@@ -60,6 +60,7 @@ export class Network3D {
   setOptions(o) { Object.assign(this.opts, o); if (this.cs) this.build(this.cs, this.pf, this.extra); }
 
   clear() {
+    this.clearGenFires?.();
     (this.lineFires || []).forEach((f) => f.dispose()); this.lineFires = [];
     if (this.fault) { this.fault.fire.dispose(); this.fault.arc.dispose(); this.fault = null; }
     this.root.traverse((o) => { o.geometry?.dispose?.(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); if (o.isCSS2DObject) o.element.remove(); });
@@ -200,6 +201,16 @@ export class Network3D {
     const arc = new Arc(this.scene, p.clone().setY(p.y + 0.2), new THREE.Vector3(p.x + 0.6, 0, p.z + 0.4));
     this.fault = { fire, arc, active: true, i };
   }
+  /** Fire & smoke at a tripped generator (damage / protection operation site). */
+  setGenFire(k, on = true) {
+    this.genFires = this.genFires || new Map();
+    if (!on) { this.genFires.get(k)?.dispose(); this.genFires.delete(k); return; }
+    if (this.genFires.has(k)) return;
+    const g = (this.gens || []).find((x) => x.k === k); if (!g) return;
+    const f = new Fire(this.scene, g.grp.position.clone().add(new THREE.Vector3(0, 0.6, 0)), { scale: 1.8 }); f.born = this.clock.elapsedTime; this.genFires.set(k, f);
+    g.body.material.color.setHex(0x2a1a10); g.speed = 0;
+  }
+  clearGenFires() { (this.genFires || new Map()).forEach((f) => f.dispose()); this.genFires = new Map(); }
   /** Fault arc on/off (fault cleared → arc extinguished, fire smoulders). */
   setFaultActive(on) { if (this.fault) this.fault.active = on; }
 
@@ -245,6 +256,7 @@ export class Network3D {
       if (F.active) F.arc.update(); else { F.arc.line.visible = false; F.arc.light.intensity = 0; }
     }
     for (const f of this.lineFires || []) f.update(dt);
+    for (const f of (this.genFires || new Map()).values()) { const age = t - f.born; f.intensity = age < 10 ? Math.min(1, age * 2) : Math.max(0.15, 1 - (age - 10) / 15); f.update(dt); }
     if (this.playback) this.animatePlayback(dt);
     if (this.mode) this.animateMode(t);
     if (this.sel) this.sel.rotation.z += dt;
