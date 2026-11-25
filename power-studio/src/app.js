@@ -45,7 +45,7 @@ function shell() {
   const nav = h('nav', { id: 'nav' }, groups.map((g) => h('div', { class: 'nav-group' }, h('div', { class: 'nav-title' }, g), VIEWS.filter((v) => v.group === g).map((v) => h('a', { href: '#' + v.id, 'data-id': v.id }, h('span', { class: 'ico' }, v.icon), v.title)))));
   const main = h('main', { id: 'main' });
   document.body.append(
-    h('header', { class: 'topbar' }, menuBtn, h('div', { class: 'brand' }, h('span', { class: 'logo' }, '⚡'), h('div', {}, h('b', {}, 'برق‌نما'), h('small', {}, 'استودیوی مهندسی سیستم‌های قدرت'))), h('div', { class: 'top-right' }, h('label', { class: 'case-pick' }, T('Network: ', 'شبکه: '), sel), status, langBtn, theme)),
+    h('header', { class: 'topbar' }, menuBtn, h('div', { class: 'brand' }, h('span', { class: 'logo' }, '⚡'), h('div', {}, h('b', {}, 'برق‌نما'), h('small', {}, T('Powered by Ilia Baktash', 'قدرت گرفته از ایلیا بکتاش')))), h('div', { class: 'top-right' }, h('label', { class: 'case-pick' }, T('Network: ', 'شبکه: '), sel), status, langBtn, theme)),
     h('div', { class: 'layout' }, nav, main),
   );
   onChange(() => { sel.value = state.caseKey; updateStatus(); route(true); });
